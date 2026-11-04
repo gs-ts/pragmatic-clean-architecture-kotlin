@@ -1,6 +1,6 @@
 # Pragmatic Clean Architecture & Tactical DDD (Kotlin / KMP / Android)
 
-An AI Agent Skill designed for **Android Studio**, **IntelliJ IDEA**, **Claude Code**, **Cursor**, and **GitHub Copilot**.
+An Agent Skill for **Gemini in Android Studio**, **Claude Code**, **Cursor**, **GitHub Copilot**, **Junie**, and other agents that support the open `SKILL.md` format.
 
 This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and **Clean Architecture** where they pay off in Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform): rich domain models, value objects, a ubiquitous language, and clean boundaries. Use it while writing new code, or as a **reviewer** for an existing feature: it suggests concrete improvements and explains their trade-offs instead of demanding rewrites. It doesn't impose backend-style DDD ceremony or 1:1 layer boilerplate, and it respects your project's existing conventions.
 
@@ -40,67 +40,79 @@ The skill reads the feature end to end and reports suggestions in priority order
 
 ```text
 pragmatic-clean-architecture-kotlin/
-├── README.md                                   # This file
+├── README.md                                     # This file
 ├── LICENSE
 ├── docs/
-│   └── WHY-PRAGMATIC-CLEAN-ARCHITECTURE.md     # Benefits and trade-offs, for humans
+│   └── WHY-PRAGMATIC-CLEAN-ARCHITECTURE.md       # Benefits and trade-offs, for humans
 ├── skills/
-│   └── pragmatic-clean-architecture-kotlin/    # The skill: copy this folder
-│       ├── SKILL.md                            # Ground rules, decision guides, workflows, checklist
+│   └── pragmatic-clean-architecture-kotlin/      # The skill: copy this folder
+│       ├── SKILL.md                              # Ground rules, decision guides, workflows, checklist
 │       ├── LICENSE.txt
 │       ├── references/
-│       │   ├── domain-vs-state-derivation.md   # Derived values, state styles, Compose performance
-│       │   ├── aha-and-poodr-kotlin.md         # Wrong abstractions, base classes, sealed vs. polymorphism
-│       │   ├── smart-mapping-and-acl.md        # Boundary mapping and when a UI-specific type earns its place
-│       │   ├── feature-flags-and-ab-testing.md # Experiment contracts and exposure-safe reads
-│       │   ├── tactical-ddd-kotlin.md          # Value objects, entities, errors, DI, GoF patterns
-│       │   ├── use-cases-and-testing.md        # Use-case litmus test, fakes, virtual time, Macrobenchmark
-│       │   └── kmp.md                          # Kotlin Multiplatform and the Swift boundary
+│       │   ├── domain-vs-state-derivation.md     # Derived values, state styles, Compose performance
+│       │   ├── aha-and-poodr-kotlin.md           # Wrong abstractions, base classes, sealed vs. polymorphism
+│       │   ├── smart-mapping-and-acl.md          # Boundary mapping and when a UI-specific type earns its place
+│       │   ├── feature-flags-and-ab-testing.md   # Experiment contracts and exposure-safe reads
+│       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, errors, DI, GoF patterns
+│       │   ├── use-cases-and-testing.md          # Use-case litmus test, fakes, virtual time, Macrobenchmark
+│       │   └── kmp.md                            # Kotlin Multiplatform and the Swift boundary
 │       └── examples/
-│           ├── RichDomainVsReactiveState.kt    # Domain rules vs. reactive ViewModel state
-│           ├── AntiCorruptionAndSmartMapping.kt# Boundary mapping and UI-state reuse
-│           ├── FeatureFlagsAndExperiments.kt   # Experiment contracts and exposure-safe reads
-│           ├── PragmaticTestingWithFakes.kt    # Per-key deduplication, a real use case, fakes
-│           └── PragmaticTestingWithFakesTest.kt# Sociable tests with virtual time and Turbine
-├── ide-configs/                                # Generated from SKILL.md; don't edit by hand
+│           ├── RichDomainVsReactiveState.kt      # Domain rules vs. reactive ViewModel state
+│           ├── AntiCorruptionAndSmartMapping.kt  # Boundary mapping and UI-state reuse
+│           ├── FeatureFlagsAndExperiments.kt     # Experiment contracts and exposure-safe reads
+│           ├── PragmaticTestingWithFakes.kt      # Per-key deduplication, a real use case, fakes
+│           └── PragmaticTestingWithFakesTest.kt  # Sociable tests with virtual time and Turbine
+├── ide-configs/                                  # Generated from SKILL.md; don't edit by hand
 │   ├── copilot-instructions.md
 │   └── AGENTS.md
 └── scripts/
-    └── build-adapters.sh                       # Regenerates ide-configs/ from SKILL.md
+    └── build-adapters.sh                         # Regenerates ide-configs/ from SKILL.md
 ```
 
 ---
 
 ## How to use in your IDE
 
+Each agent looks for skills in its own folder:
+
+| Agent | Project folder |
+| :--- | :--- |
+| Gemini in Android Studio (Agent Mode) | `.agents/skills/` |
+| Claude Code | `.claude/skills/` |
+| Cursor | `.agents/skills/` or `.cursor/skills/` |
+| GitHub Copilot | `.agents/skills/`, `.github/skills/`, or `.claude/skills/` |
+| Junie (JetBrains) | `.junie/skills/` |
+
+The simplest setup is one copy in `.agents/skills/` and a link to it from `.claude/skills/`.
+
+### 1. Install the skill
+
 Clone this repository (or download it as a ZIP) somewhere outside your project:
 ```bash
 git clone https://github.com/gs-ts/pragmatic-clean-architecture-kotlin.git
 ```
-Run the commands below from **your project's root**, with `PCAK` pointing at the clone:
+
+Then, from **your project's root**, with `PCAK` pointing at the clone:
 ```bash
 PCAK=path/to/pragmatic-clean-architecture-kotlin
+mkdir -p .agents/skills .claude/skills
+cp -R "$PCAK/skills/pragmatic-clean-architecture-kotlin" .agents/skills/
+ln -s ../../.agents/skills/pragmatic-clean-architecture-kotlin .claude/skills/
+# Junie: mkdir -p .junie/skills && ln -s ../../.agents/skills/pragmatic-clean-architecture-kotlin .junie/skills/
 ```
+- Commit `.agents/` and `.claude/` to share the skill with your team.
+- To have it in every project, just for you, run the same commands from your home folder (`cd ~`) instead.
+- On Windows, copy the folder into `.claude/skills/` instead of linking it.
 
-### 1. Android Studio / JetBrains AI Assistant / Claude Code / Agent Skills
-Copy the skill folder into your project's `.claude/skills/` or `.agents/skills/` directory:
-```bash
-mkdir -p .claude/skills
-cp -R "$PCAK/skills/pragmatic-clean-architecture-kotlin" .claude/skills/
-```
+Agents load the skill on their own when a request matches it. To call it explicitly, type `@pragmatic-clean-architecture-kotlin` in Gemini's Agent Mode, or `/pragmatic-clean-architecture-kotlin` in Claude Code or Cursor.
 
-### 2. GitHub Copilot in Android Studio
-Copy `ide-configs/copilot-instructions.md` to `.github/copilot-instructions.md` in your project:
-```bash
-mkdir -p .github
-cp "$PCAK/ide-configs/copilot-instructions.md" .github/copilot-instructions.md
-```
+### 2. Optional: always-on rules
 
-### 3. AGENTS.md
-For tools that read `AGENTS.md`, copy `$PCAK/ide-configs/AGENTS.md` to your project root, or paste its contents into your existing `AGENTS.md`.
+`ide-configs/` holds a short version of the rules (the ground rules and the checklist) for tools that read an instruction file on every request:
+- **AGENTS.md** (read by Gemini in Android Studio, GitHub Copilot, Windsurf, and others): copy `$PCAK/ide-configs/AGENTS.md` to your project root, or paste its contents into your existing `AGENTS.md`.
+- **GitHub Copilot:** copy `$PCAK/ide-configs/copilot-instructions.md` to `.github/copilot-instructions.md`.
 
-### 4. Cursor / Windsurf
-Reference `skills/pragmatic-clean-architecture-kotlin/SKILL.md` and its `references/` directory (from your copy) in your `.cursor/rules/` or `.windsurfrules` configuration.
+These files are added to every prompt, so use them on top of the skill only if you want the checklist applied all the time.
 
 ---
 
