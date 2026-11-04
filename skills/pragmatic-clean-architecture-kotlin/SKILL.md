@@ -1,18 +1,18 @@
 ---
 name: pragmatic-clean-architecture-kotlin
-description: Guides pragmatic Clean Architecture for Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform). Use when adding a screen or feature, or when creating or reviewing ViewModels, UI state, repositories, use cases, mappers, domain models, feature flags and A/B tests, or unit tests. Triggers include "where should this logic live", "do I need a use case", "should I map this to a UI model", "replace MockK with fakes", and "review this ViewModel". Favors minimal ceremony (optional use cases, mapping only at real boundaries, fakes over mocks) and defers to the project's existing conventions.
+description: Applies tactical Domain-Driven Design and pragmatic Clean Architecture to Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform) where they pay off. Use when adding a screen or feature, or when creating or reviewing domain models, ViewModels, UI state, repositories, use cases, mappers, feature flags and A/B tests, or unit tests. When reviewing existing code, it suggests concrete improvements (value objects, rules on the domain model, boundary mapping, less ceremony) with their trade-offs instead of demanding rewrites. Triggers include "review this feature", "how can I improve this domain model", "where should this logic live", "do I need a use case", and "replace MockK with fakes". Defers to the project's existing conventions.
 license: MIT (see LICENSE.txt)
 ---
 
 # Pragmatic Clean Architecture for Kotlin Clients (Android · Compose · KMP)
 
-Apply Clean Architecture, tactical DDD, AHA (Avoid Hasty Abstractions), Sandi Metz's POODR, and fakes-first testing to Kotlin client code. Pick the simplest structure that keeps the code correct, testable, and easy to change. Each rule is a default with stated exceptions.
+Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Metz's POODR, and fakes-first testing to Kotlin client code, where they pay off. When writing code, pick the simplest structure that keeps it correct, testable, and easy to change. When reviewing, suggest concrete improvements and explain their trade-offs; don't demand rewrites. Each rule is a default with stated exceptions.
 
 <!-- BEGIN GROUND-RULES: shared with ide-configs/ by scripts/build-adapters.sh -->
 ## Ground rules
 
-1. **Project conventions win.** Instructions in AGENTS.md or CLAUDE.md, architecture docs, and patterns the codebase applies consistently override these rules. Follow them, and mention a trade-off at most once.
-2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Don't refactor surrounding code to match them unless asked.
+1. **Project conventions win.** Instructions in AGENTS.md or CLAUDE.md, architecture docs, and patterns the codebase applies consistently override these rules. When writing code, follow them. When reviewing, don't report a deliberate convention as a defect; suggest an improvement to it at most once, marked optional.
+2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Suggest improvements to that code, but don't refactor beyond it, or apply review suggestions, unless asked.
 3. **Check versions before using version-gated features.** `kotlin.time.Instant` and `Clock` are stable from Kotlin 2.3 (earlier versions need `@OptIn(ExperimentalTime::class)`). Explicit backing fields need Kotlin 2.4; otherwise use `private val _state = MutableStateFlow(...)` with `asStateFlow()`. Compose strong skipping is on by default from Kotlin 2.0.20.
 4. **Explain deviations.** When you depart from a default here, say why in one sentence.
 <!-- END GROUND-RULES -->
@@ -41,7 +41,7 @@ Apply Clean Architecture, tactical DDD, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Data → Domain.** Mandatory for network DTOs from APIs you don't control and for third-party SDK types (Places, Firebase, BLE): map them in the repository. For a local database schema you own that changes in lockstep with the model, a 1:1 mapper is a judgment call; map when you want storage annotations out of shared domain code or the schema stores data differently.
 - **Parse, don't throw, at the boundary.** `init { require(...) }` on value objects catches programmer errors. Mappers use non-throwing factories (`PlaceId.parse(raw)`) and an explicit policy per field (drop and report, default, or typed error), so one bad record can't terminate a `Flow`.
-- **Domain → UI.** Reuse domain models in `State` by default. Add a UI model only to merge sources, present typed display values, or attach screen-local state. For selection or expansion, a `Set<Id>` next to the reused list is often enough and keeps unchanged items' instances. Collection stability is not a reason to add a UI model.
+- **Domain → UI.** Reuse domain models in `State` by default. Derive cheap display values (a title fallback, a badge flag) as getters or functions on `State`, or as UI-layer extension properties on the domain model; no mapper needed. Add a UI-specific type only when the UI needs a different shape (rows grouped under headers, rows merged from several sources), a derivation is too expensive for a getter, or module boundaries keep UI code off domain types; reuse domain objects inside it. For selection or expansion, keep a `Set<Id>` next to the reused list. Copying fields 1:1 and collection stability are not reasons.
 
 → Details: `references/smart-mapping-and-acl.md`
 
@@ -116,20 +116,35 @@ Apply Clean Architecture, tactical DDD, AHA (Avoid Hasty Abstractions), Sandi Me
 3. **Data:** a repository implementation that maps at the boundary (parse, don't throw) and translates errors (rethrowing cancellation).
 4. **Use case:** only if it passes section 5.
 5. **ViewModel:** one state style, a `sealed interface Action`, derived lists built from their own inputs.
-6. **UI:** reuse domain models in state; format locale-dependent values in composables.
+6. **UI:** reuse domain models in state, derive cheap display values with getters, and format locale-dependent values in composables.
 7. **Tests:** sociable ViewModel or use-case tests with fakes at the lowest I/O boundary and virtual time.
 8. **Summary:** mention any deviations from these defaults and why.
+
+## Workflow: reviewing an existing feature
+
+1. Read the project's conventions, then the feature end to end: domain models, repository, use cases, ViewModel, UI, and tests.
+2. Walk the checklist below, and look for domain-modeling opportunities in particular:
+   - primitives that should be value objects (IDs, amounts, coordinates);
+   - rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask);
+   - boolean or nullable combinations that a `sealed` type would make impossible;
+   - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
+   - invariants checked in several places instead of once, at construction or at the boundary.
+3. Report suggestions, most important first: correctness risks (swallowed cancellation, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
+4. For each suggestion, give the location, why it helps, a short before/after, and its cost or trade-off. Mark optional suggestions as optional, and say so when the current code is fine as it is.
+5. Don't apply changes unless asked.
 
 <!-- BEGIN CHECKLIST: shared with ide-configs/ by scripts/build-adapters.sh -->
 ## Checklist (write and review against these)
 
 - [ ] Follows the project's existing conventions; changes stay within the requested scope.
+- [ ] Domain concepts are explicit and named in the product's language: IDs and constrained values are value objects, rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
 - [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or is shared; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
+- [ ] UI state reuses domain models; cheap display values are getters or functions, and UI-specific types exist only for a different shape, an expensive derivation, or a module boundary.
 - [ ] Locale-dependent text is formatted in the UI (or kept as `StringResource`/`UiText`), not in ViewModel-built strings.
 - [ ] Time comes from an injected `Clock`/`TimeSource` or a `now` parameter.
 - [ ] Each ViewModel uses one state style, receives input through a sealed `Action`, and never writes to derived state.
@@ -137,14 +152,13 @@ Apply Clean Architecture, tactical DDD, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] Shared abstractions have no boolean mode flags; no new base class without 3+ proven, flag-free uses.
 - [ ] Flag keys stay in the data layer; exposure-logging reads are functions called at the decision point; parent flags are read once per screen.
 - [ ] Tests use fakes at the lowest I/O boundary, assert on state, and use virtual time (no `Thread.sleep`, no real delays).
-- [ ] Version-gated syntax matches the project's Kotlin version.
 <!-- END CHECKLIST -->
 
 ## Reference and example files
 
 - `references/domain-vs-state-derivation.md`: derived values, ViewModel state styles, and Compose performance under strong skipping.
 - `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask, and `sealed` vs. polymorphism.
-- `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI model earns its place.
+- `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI-specific type earns its place.
 - `references/feature-flags-and-ab-testing.md`: experiment contracts, exposure-safe reads, and inline branches vs. Strategy.
 - `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors and cancellation, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.

@@ -2,7 +2,7 @@
 
 An AI Agent Skill designed for **Android Studio**, **IntelliJ IDEA**, **Claude Code**, **Cursor**, and **GitHub Copilot**.
 
-Instead of enforcing rigid, backend-heavy Domain-Driven Design (DDD) or generating 1:1 Clean Architecture boilerplate across every layer, this skill guides AI assistants to write **pragmatic, idiomatic Kotlin** for reactive Android, Jetpack Compose, and Kotlin Multiplatform (KMP) clients.
+This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and **Clean Architecture** where they pay off in Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform): rich domain models, value objects, a ubiquitous language, and clean boundaries. Use it while writing new code, or as a **reviewer** for an existing feature: it suggests concrete improvements and explains their trade-offs instead of demanding rewrites. It doesn't impose backend-style DDD ceremony or 1:1 layer boilerplate, and it respects your project's existing conventions.
 
 > **New to this approach?** [`docs/WHY-PRAGMATIC-CLEAN-ARCHITECTURE.md`](./docs/WHY-PRAGMATIC-CLEAN-ARCHITECTURE.md) gives a short breakdown of the benefits and the trade-offs.
 
@@ -10,16 +10,29 @@ Instead of enforcing rigid, backend-heavy Domain-Driven Design (DDD) or generati
 
 ## What the skill teaches
 
-- **Project conventions first:** an existing codebase's conventions and explicit project instructions override the skill's defaults, and the agent stays within the requested scope.
+- **Tactical DDD where it pays off:** domain rules on the model (Tell, Don't Ask), value objects for IDs and constrained values, `sealed` types that make impossible states unrepresentable, immutable entity snapshots, and names in the product's language.
+- **Project conventions first:** an existing codebase's conventions and explicit project instructions override the skill's defaults. In reviews, the skill suggests improvements instead of flagging deliberate conventions as defects.
 - **Derived values in the right place:** domain model, Flow pipeline, ViewModel state, or composable, chosen by inputs and cost.
+- **Mapping at real boundaries:** mandatory for APIs and SDKs you don't control, with mappers that parse instead of throwing. UI state reuses domain models, with display values derived by getters.
 - **Compose performance without ceremony:** preserve instances under strong skipping instead of converting collections or adding UI models.
-- **Mapping at real boundaries:** mandatory for APIs and SDKs you don't control; mappers parse instead of throwing; domain models are reused in UI state by default.
 - **Use cases that earn their keep:** no pass-throughs and no use-case interfaces.
 - **Fakes over mocks:** sociable tests that fake the lowest I/O boundary, with virtual time and no real delays.
 - **Exposure-safe feature flags and A/B tests.**
-- **Tactical DDD that pays off on clients:** value objects and immutable entity snapshots, plus notes for KMP shared code and the Swift boundary.
+- **Kotlin Multiplatform:** shared domain code, DI without Hilt, and what survives the Swift boundary.
 
 The full rules live in [`skills/pragmatic-clean-architecture-kotlin/SKILL.md`](./skills/pragmatic-clean-architecture-kotlin/SKILL.md).
+
+---
+
+## Use it as a reviewer
+
+Point your agent at an existing feature, for example:
+
+> Review the route-details feature with the pragmatic-clean-architecture-kotlin skill.
+
+> Suggest DDD improvements for `RouteRepository` and its domain models.
+
+The skill reads the feature end to end and reports suggestions in priority order: correctness risks first, then domain-modeling improvements, simplifications, and tests. Each suggestion comes with its location, why it helps, a short before/after, and the trade-off. Optional suggestions are marked as such, and nothing changes unless you ask.
 
 ---
 
@@ -33,12 +46,12 @@ pragmatic-clean-architecture-kotlin/
 │   └── WHY-PRAGMATIC-CLEAN-ARCHITECTURE.md     # Benefits and trade-offs, for humans
 ├── skills/
 │   └── pragmatic-clean-architecture-kotlin/    # The skill: copy this folder
-│       ├── SKILL.md                            # Ground rules, decision guides, workflow, checklist
+│       ├── SKILL.md                            # Ground rules, decision guides, workflows, checklist
 │       ├── LICENSE.txt
 │       ├── references/
 │       │   ├── domain-vs-state-derivation.md   # Derived values, state styles, Compose performance
 │       │   ├── aha-and-poodr-kotlin.md         # Wrong abstractions, base classes, sealed vs. polymorphism
-│       │   ├── smart-mapping-and-acl.md        # Boundary mapping and when a UI model earns its place
+│       │   ├── smart-mapping-and-acl.md        # Boundary mapping and when a UI-specific type earns its place
 │       │   ├── feature-flags-and-ab-testing.md # Experiment contracts and exposure-safe reads
 │       │   ├── tactical-ddd-kotlin.md          # Value objects, entities, errors, DI, GoF patterns
 │       │   ├── use-cases-and-testing.md        # Use-case litmus test, fakes, virtual time, Macrobenchmark

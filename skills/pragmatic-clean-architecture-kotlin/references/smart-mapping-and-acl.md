@@ -61,27 +61,14 @@ override fun observeRouteWithPhotos(routeId: RouteId): Flow<RouteWithPhotos> =
 
 ## 2. Domain → UI: earn your mapper
 
-### Reuse the domain model in `State` when
-1. **The UI shows what the domain model holds.**
-2. **You don't need per-item wrappers:** either there's no per-item UI state, or a `Set<Id>` beside the list covers it.
+Every screen has a `State`. The question is whether it holds domain models directly, or mapped copies (`PhotoUiModel`) that a mapper produces.
+
+### Default: reuse domain models, derive display values on read
+1. Put domain models in `State` as they are, next to screen-local state.
+2. Derive cheap display values (a title fallback, a badge flag, "is this row selected?") as getters or functions on `State`, or as UI-layer extension properties on the domain model. Keep them O(1) (see `domain-vs-state-derivation.md`). They need no mapper, and they can't drift from their source.
+3. For selection or expansion, keep a `Set<Id>` next to the reused list. Wrapping every item (`PhotoItem(photo, isSelected)`) creates a new wrapper for every row on each toggle, so no row can skip by identity.
 
 Compose stability is **not** a criterion. Under strong skipping (the default since Kotlin 2.0.20), classes from non-Compose modules and plain `List`s still skip when the same instance is passed. Keep instances stable instead (see `domain-vs-state-derivation.md`).
-
-```kotlin
-// PhotoMetadata already matches what the feed renders.
-// A PhotoMetadataUiModel would be a 1:1 copy.
-data class State(
-    val ongoingRouteId: RouteId? = null,
-    val photos: List<PhotoMetadata> = emptyList(),
-)
-```
-
-### Create a UI model when at least one of these holds
-1. **Merging sources:** the screen combines a domain model with other data or screen-local state.
-2. **Typed display values:** the UI needs a presentation decision the domain doesn't own (a title fallback, a section choice), expressed as a type the composable renders. Keep locale-dependent formatting in the composable.
-3. **Per-item UI state:** for selection or expansion, prefer a `Set<Id>` next to the reused list. Wrapping every item (`PhotoItem(photo, isSelected)`) creates a new wrapper for every row on each toggle, so no row can skip by identity. Wrap when items need several derived UI fields.
-
-Converting `List` to `PersistentList` is **not** a reason.
 
 ```kotlin
 /** A typed title. The composable turns it into text, so it follows locale changes. */
@@ -90,18 +77,28 @@ sealed interface RouteTitle {
     data object Untitled : RouteTitle // e.g. stringResource(R.string.untitled_route) in the UI
 }
 
-data class RouteDetailUiState(
-    val title: RouteTitle,
-    val createdAt: Instant, // formatted in the composable, not here
-    val photos: List<PhotoMetadata>, // domain objects reused as-is
-    val selectedPhotoIds: Set<PhotoId>, // screen-local state, no per-item wrappers
-)
+data class RouteDetailState(
+    val route: Route, // reused as-is; the composable formats route.createdAt
+    val photos: List<PhotoMetadata>, // reused as-is: no PhotoUiModel
+    val selectedPhotoIds: Set<PhotoId> = emptySet(), // per-item UI state without wrapping every photo
+) {
+    // Cheap (O(1)) display values, derived on read: no UI model, no mapper.
+    val title: RouteTitle
+        get() = route.displayName?.let(RouteTitle::Custom) ?: RouteTitle.Untitled
 
-fun RouteWithPhotos.toUiState(selectedPhotoIds: Set<PhotoId>): RouteDetailUiState = RouteDetailUiState(
-    title = route.displayName?.let(RouteTitle::Custom) ?: RouteTitle.Untitled,
-    createdAt = route.createdAt,
-    photos = photos, // the same list instance as the domain emission
-    selectedPhotoIds = selectedPhotoIds,
-)
+    fun isSelected(photo: PhotoMetadata): Boolean = photo.id in selectedPhotoIds
+}
 ```
-The parent gets a UI model because it merges the route with selection state and needs a typed title. Its children reuse `PhotoMetadata` directly instead of a pointless `PhotoUiModel`.
+
+### When a UI-specific type earns its place
+1. **A different shape:** the UI groups or merges data into something the domain doesn't model (photos under place headers, rows that combine two sources). Build it once per emission in the Flow pipeline, and keep domain objects inside it:
+   ```kotlin
+   sealed interface PhotoFeedRow {
+       data class PlaceHeader(val placeId: PlaceId, val photoCount: Int) : PhotoFeedRow
+       data class Photo(val photo: PhotoMetadata) : PhotoFeedRow // the domain object, not a copy
+   }
+   ```
+2. **An expensive derivation:** a value too costly for a getter (O(N) over a large list) is computed once per emission and stored, in a `State` field or inside the UI type.
+3. **A module boundary:** your module structure deliberately keeps UI code from depending on domain types.
+
+Not reasons: copying fields 1:1, cheap display values (use getters), or converting `List` to `PersistentList`.
