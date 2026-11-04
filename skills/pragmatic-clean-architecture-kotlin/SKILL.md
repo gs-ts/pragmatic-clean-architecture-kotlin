@@ -12,7 +12,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 ## Ground rules
 
 1. **Project conventions win.** Instructions in AGENTS.md or CLAUDE.md, architecture docs, and patterns the codebase applies consistently override these rules. When writing code, follow them. When reviewing, don't report a deliberate convention as a defect; suggest an improvement to it at most once, marked optional.
-2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Suggest improvements to that code, but don't refactor beyond it, or apply review suggestions, unless asked.
+2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Suggest improvements to that code, but don't refactor beyond it or apply review suggestions unless asked.
 3. **Check versions before using version-gated features.** `kotlin.time.Instant` and `Clock` are stable from Kotlin 2.3 (earlier versions need `@OptIn(ExperimentalTime::class)`). Explicit backing fields need Kotlin 2.4; otherwise use `private val _state = MutableStateFlow(...)` with `asStateFlow()`. Compose strong skipping is on by default from Kotlin 2.0.20.
 4. **Explain deviations.** When you depart from a default here, say why in one sentence.
 <!-- END GROUND-RULES -->
@@ -22,7 +22,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 | The value depends on… | Compute it in… | Why |
 | :--- | :--- | :--- |
 | Only the model's own fields, cheaply (`isOngoing`, `hasAiSummary`) | **Domain model** getter | Each Flow emission is a new immutable instance, so the value is always current. |
-| Only the model's own fields, expensively (loops, sorting, distance over thousands of points) | **Once per emission:** repository mapper, Flow `map` on `Dispatchers.Default`, or a `val` initialized in the constructor of a repository-emitted model | A getter re-runs on every read, on the main thread during composition, and returns a new instance each time, so children that receive it can't skip. Don't put constructor-computed values on `State`: every `copy()` recomputes them. |
+| Only the model's own fields, expensively (loops, sorting, distance over thousands of points) | **Once per emission:** repository mapper, Flow `map` on `Dispatchers.Default`, or a `val` initialized in the constructor of a repository-emitted model | A getter re-runs on every read, on the main thread during composition. If it returns a list, each read is a new instance, so children that receive it can't skip. Don't put constructor-computed values on `State`: every `copy()` recomputes them. |
 | The model plus UI state or another stream (filter, selection, service status, location) | **ViewModel:** `combine()` for O(N) work, `State` getters for O(1) flags | Domain models don't know about UI state or other streams. Derive each list only from the inputs it depends on, so unrelated changes reuse the same instance. |
 | The current time | A **`now: Instant` parameter** (`isAbandonedAt(now)`); ticking UI from an injected `Clock` | Keeps domain code pure and testable. |
 | Locale, string resources, `Context` | **Composable**, or keep `StringResource`/`UiText` in state | ViewModels survive locale changes, so strings formatted there go stale. Also keeps shared code platform-free. |
@@ -75,7 +75,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - **Fakes over mocks; sociable tests.** Use real use cases, mappers, and repositories. Fake the lowest I/O boundary you own (DAO, API client, SDK wrapper) when the repository has logic; fake the repository when it's thin.
 - **Assert on state.** Count calls in a fake only when the count is the behavior (deduplication, caching, exposure logging).
 - **Deterministic time:** `runTest`, `StandardTestDispatcher`, `testScheduler.timeSource` (shares the virtual clock with `delay`), and Turbine with `backgroundScope`.
-- **Macrobenchmarks:** bind a fake data source in a variant-specific DI module. The production binding must not be compiled into that variant, or DI reports a duplicate binding.
+- **Macrobenchmarks:** bind a fake data source in a variant-specific DI module. The production binding must not be compiled into that variant, or a compile-time container like Dagger/Hilt reports a duplicate binding.
 - **Legacy code:** mocks are fine as temporary scaffolding around untestable classes; put new logic behind sprout or wrap seams.
 
 → Details: `references/use-cases-and-testing.md`, `examples/PragmaticTestingWithFakesTest.kt`
@@ -163,4 +163,4 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors and cancellation, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
-- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping, feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlinx-coroutines-test and Turbine.
+- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping, feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.

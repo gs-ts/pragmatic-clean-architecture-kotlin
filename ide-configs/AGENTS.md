@@ -7,7 +7,7 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 ## Ground rules
 
 1. **Project conventions win.** Instructions in AGENTS.md or CLAUDE.md, architecture docs, and patterns the codebase applies consistently override these rules. When writing code, follow them. When reviewing, don't report a deliberate convention as a defect; suggest an improvement to it at most once, marked optional.
-2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Suggest improvements to that code, but don't refactor beyond it, or apply review suggestions, unless asked.
+2. **Stay in scope.** Apply these rules to code you're writing or were asked to review. Suggest improvements to that code, but don't refactor beyond it or apply review suggestions unless asked.
 3. **Check versions before using version-gated features.** `kotlin.time.Instant` and `Clock` are stable from Kotlin 2.3 (earlier versions need `@OptIn(ExperimentalTime::class)`). Explicit backing fields need Kotlin 2.4; otherwise use `private val _state = MutableStateFlow(...)` with `asStateFlow()`. Compose strong skipping is on by default from Kotlin 2.0.20.
 4. **Explain deviations.** When you depart from a default here, say why in one sentence.
 
