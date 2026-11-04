@@ -69,8 +69,9 @@ data class State(
     val isTracking: Boolean
         get() = isLocationServiceRunning && ongoingRouteId != null
 
+    // Uses the unfiltered photos (Pattern B): a filter that hides every photo isn't "loading".
     val isStreamLoading: Boolean
-        get() = isTracking && photoSection.photos.isEmpty()
+        get() = isTracking && !photoSection.routeHasPhotos
 }
 ```
 
@@ -99,6 +100,7 @@ private val photoSection: Flow<PhotoSection> = combine(
     PhotoSection(
         photos = if (aiOnly) routeWithPhotos.photos.filter { it.hasAiSummary } else routeWithPhotos.photos,
         isAiFilterEnabled = aiOnly,
+        routeHasPhotos = routeWithPhotos.photos.isNotEmpty(), // before the filter
     )
 }
 

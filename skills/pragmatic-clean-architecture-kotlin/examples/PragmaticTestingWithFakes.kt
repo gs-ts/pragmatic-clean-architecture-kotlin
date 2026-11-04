@@ -23,6 +23,11 @@ import kotlin.time.TimeSource
 //    - One lock per place: concurrent refreshes of the SAME place hit the network
 //      once, while different places refresh in parallel. A single repository-wide
 //      Mutex would queue every refresh behind the slowest network call.
+//    - Only the TTL decides whether to refetch. Comparing the caller's expired URI
+//      with the stored one looks cheaper, but once the TTL has passed, the stored
+//      URI may have expired too, and the caller would get a dead URI back.
+//    - Within the TTL, callers get the cached URI without a network call, so a
+//      place costs at most one successful refresh per TTL, however many screens ask.
 // ============================================================================
 
 class PhotoUriRefreshRepository(
@@ -34,36 +39,31 @@ class PhotoUriRefreshRepository(
 ) {
     private val stateLock = Mutex() // guards the two maps below; never held during I/O
     private val placeLocks = mutableMapOf<PlaceId, Mutex>() // one per place seen; bound it (LRU) if places are unbounded
-    private val recentRefreshes = mutableMapOf<PlaceId, CachedUri>()
+    private val recentRefreshes = mutableMapOf<PlaceId, CachedUri>() // only entries within the TTL
 
     private class CachedUri(val uri: String, val refreshedAt: TimeMark)
 
-    suspend fun refreshAndSavePhotoUri(placeId: PlaceId, expiredUri: String): String? =
+    suspend fun refreshAndSavePhotoUri(placeId: PlaceId): String? =
         withContext(ioDispatcher) {
             val placeLock = stateLock.withLock { placeLocks.getOrPut(placeId) { Mutex() } }
             placeLock.withLock {
                 // 1. A refresh within the TTL wins (another caller may have just made it).
-                val cached = stateLock.withLock { recentRefreshes[placeId] }
-                if (cached != null && cached.refreshedAt.elapsedNow() < cacheTtl) {
-                    return@withLock cached.uri
-                }
+                cachedUri(placeId)?.let { return@withLock it }
 
-                // 2. The database may already hold a newer URI than the caller's.
-                val currentUri = photoDao.getPhotoUri(placeId)
-                if (currentUri != null && currentUri != expiredUri) {
-                    remember(placeId, currentUri)
-                    return@withLock currentUri
-                }
-
-                // 3. Otherwise fetch, persist, and remember.
+                // 2. Otherwise fetch, persist, and cache.
                 val freshUri = placesClient.fetchFreshPhotoUri(placeId) ?: return@withLock null
                 photoDao.updatePhotoUri(placeId, freshUri)
-                remember(placeId, freshUri)
+                cacheUri(placeId, freshUri)
                 freshUri
             }
         }
 
-    private suspend fun remember(placeId: PlaceId, uri: String) {
+    private suspend fun cachedUri(placeId: PlaceId): String? = stateLock.withLock {
+        recentRefreshes.entries.removeAll { (_, cached) -> cached.refreshedAt.elapsedNow() >= cacheTtl }
+        recentRefreshes[placeId]?.uri
+    }
+
+    private suspend fun cacheUri(placeId: PlaceId, uri: String) {
         stateLock.withLock { recentRefreshes[placeId] = CachedUri(uri, timeSource.markNow()) }
     }
 }
@@ -73,7 +73,6 @@ interface PlacesRemoteClient {
 }
 
 interface PhotoUriDao {
-    suspend fun getPhotoUri(placeId: PlaceId): String?
     suspend fun updatePhotoUri(placeId: PlaceId, newUri: String)
 }
 
@@ -146,11 +145,8 @@ class FakeLocationTracker : LocationTracker {
 class FakePhotoUriDao : PhotoUriDao {
     private val storage = mutableMapOf<PlaceId, String>()
 
-    fun seed(placeId: PlaceId, uri: String) {
-        storage[placeId] = uri
-    }
-
-    override suspend fun getPhotoUri(placeId: PlaceId): String? = storage[placeId]
+    /** For assertions: what the repository persisted. */
+    fun uriOf(placeId: PlaceId): String? = storage[placeId]
 
     override suspend fun updatePhotoUri(placeId: PlaceId, newUri: String) {
         storage[placeId] = newUri
@@ -167,5 +163,17 @@ class FakePlacesRemoteClient(
         networkCallCount++
         delay(simulatedLatency) // virtual time under runTest
         return "https://example.com/fresh_${placeId.value}.jpg"
+    }
+}
+
+/** Fakes the remote API, the lowest boundary of RemoteNearbyPlacesRepository. Set [failure] to make calls throw. */
+class FakeNearbySearchApi(
+    private val places: List<PlaceDto>? = null,
+) : NearbySearchApi {
+    var failure: Throwable? = null
+
+    override suspend fun searchNearby(latitude: Double, longitude: Double, radiusMeters: Double): NearbySearchResponseDto {
+        failure?.let { throw it }
+        return NearbySearchResponseDto(places = places)
     }
 }

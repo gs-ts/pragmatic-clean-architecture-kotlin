@@ -58,7 +58,7 @@ pragmatic-clean-architecture-kotlin/
 │       │   └── kmp.md                            # Kotlin Multiplatform and the Swift boundary
 │       └── examples/
 │           ├── RichDomainVsReactiveState.kt      # Domain rules vs. reactive ViewModel state
-│           ├── AntiCorruptionAndSmartMapping.kt  # Boundary mapping and UI-state reuse
+│           ├── AntiCorruptionAndSmartMapping.kt  # Database and remote API mapping, error translation, UI-state reuse
 │           ├── FeatureFlagsAndExperiments.kt     # Experiment contracts and exposure-safe reads
 │           ├── PragmaticTestingWithFakes.kt      # Per-key deduplication, a real use case, fakes
 │           └── PragmaticTestingWithFakesTest.kt  # Sociable tests with virtual time and Turbine

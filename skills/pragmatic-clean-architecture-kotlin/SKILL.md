@@ -43,7 +43,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - **Parse, don't throw, at the boundary.** `init { require(...) }` on value objects catches programmer errors. Mappers use non-throwing factories (`PlaceId.parse(raw)`) and an explicit policy per field (drop and report, default, or typed error), so one bad record can't terminate a `Flow`.
 - **Domain → UI.** Reuse domain models in `State` by default. Derive cheap display values (a title fallback, a badge flag) as getters or functions on `State`, or as UI-layer extension properties on the domain model; no mapper needed. Add a UI-specific type only when the UI needs a different shape (rows grouped under headers, rows merged from several sources), a derivation is too expensive for a getter, or module boundaries keep UI code off domain types; reuse domain objects inside it. For selection or expansion, keep a `Set<Id>` next to the reused list. Copying fields 1:1 and collection stability are not reasons.
 
-→ Details: `references/smart-mapping-and-acl.md`
+→ Details: `references/smart-mapping-and-acl.md`, `examples/AntiCorruptionAndSmartMapping.kt`
 
 ## 4. Abstractions (AHA and POODR)
 
@@ -68,7 +68,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - **Never swallow cancellation.** When catching `Exception`/`Throwable` or using `runCatching` around suspend calls, rethrow `CancellationException`. Prefer catching specific exception types.
 - Inject dispatchers, `Clock`, and `TimeSource`. Don't call `Clock.System.now()` or `System.currentTimeMillis()` in repositories, use cases, or domain code.
 
-→ Details: `references/tactical-ddd-kotlin.md`
+→ Details: `references/tactical-ddd-kotlin.md`, `examples/AntiCorruptionAndSmartMapping.kt` (section 3)
 
 ## 7. Testing with fakes
 
@@ -163,4 +163,4 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors and cancellation, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
-- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping, feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.
+- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.

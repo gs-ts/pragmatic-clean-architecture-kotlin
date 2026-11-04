@@ -39,6 +39,29 @@ value class PlaceId(val value: String) {
     }
 }
 
+// A value object with several fields is a data class: a value class wraps a single value.
+data class Coordinates(
+    val latitude: Double,
+    val longitude: Double,
+) {
+    init {
+        require(latitude in LATITUDE_RANGE) { "Invalid latitude: $latitude" }
+        require(longitude in LONGITUDE_RANGE) { "Invalid longitude: $longitude" }
+    }
+
+    companion object {
+        private val LATITUDE_RANGE = -90.0..90.0
+        private val LONGITUDE_RANGE = -180.0..180.0
+
+        /** Non-throwing factory for boundary code. */
+        fun parse(latitude: Double?, longitude: Double?): Coordinates? {
+            if (latitude == null || longitude == null) return null
+            if (latitude !in LATITUDE_RANGE || longitude !in LONGITUDE_RANGE) return null
+            return Coordinates(latitude, longitude)
+        }
+    }
+}
+
 // ============================================================================
 // 2. DOMAIN MODELS: intrinsic, cheap (O(1)) rules live here.
 //    Immutable data classes on purpose: structural equality lets StateFlow drop
@@ -83,10 +106,14 @@ data class PhotoMetadata(
     val neighborhoodSummary: String? = null,
 ) {
     val hasAiSummary: Boolean
-        get() = !generativeSummary.isNullOrBlank() || !neighborhoodSummary.isNullOrBlank()
+        get() = aiSummary != null
 
     val primaryDescription: String?
-        get() = generativeSummary ?: neighborhoodSummary ?: displayName
+        get() = aiSummary ?: displayName?.takeIf { it.isNotBlank() }
+
+    // One definition of "has a summary", so every getter treats a blank summary as missing.
+    private val aiSummary: String?
+        get() = generativeSummary?.takeIf { it.isNotBlank() } ?: neighborhoodSummary?.takeIf { it.isNotBlank() }
 }
 
 data class RouteWithPhotos(
@@ -126,6 +153,7 @@ class ActiveRouteViewModel(
         PhotoSection(
             photos = if (aiOnly) routeWithPhotos.photos.filter { it.hasAiSummary } else routeWithPhotos.photos,
             isAiFilterEnabled = aiOnly,
+            routeHasPhotos = routeWithPhotos.photos.isNotEmpty(),
         )
     }
 
@@ -156,6 +184,7 @@ class ActiveRouteViewModel(
     data class PhotoSection(
         val photos: List<PhotoMetadata> = emptyList(),
         val isAiFilterEnabled: Boolean = false,
+        val routeHasPhotos: Boolean = false, // before the filter: see isStreamLoading
     )
 
     data class State(
@@ -167,7 +196,8 @@ class ActiveRouteViewModel(
         val isTracking: Boolean
             get() = isLocationServiceRunning && ongoingRouteId != null
 
+        // Uses the unfiltered photos: a filter that hides every photo isn't "loading".
         val isStreamLoading: Boolean
-            get() = isTracking && photoSection.photos.isEmpty()
+            get() = isTracking && !photoSection.routeHasPhotos
     }
 }
