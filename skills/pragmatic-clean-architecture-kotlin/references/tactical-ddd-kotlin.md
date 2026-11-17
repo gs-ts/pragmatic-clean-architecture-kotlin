@@ -50,6 +50,24 @@ data class Coordinates(
 }
 ```
 
+When a value needs normalizing (trimmed, sorted), make the constructor **private** and build instances only through the factory, so that every instance is normalized. With a public constructor, `RouteName(" Walk ")` would skip the trim, and two names that look the same would not be equal. A data class also generates a public `copy()` that skips the factory, so add `@ConsistentCopyVisibility` to make `copy()` private too. Without it, Kotlin 2.3 and 2.4 only warn, and the warning says that this becomes an error in language version 2.5.
+
+```kotlin
+@JvmInline
+value class RouteName private constructor(val value: String) {
+    companion object {
+        fun parse(raw: String): RouteName? = raw.trim().takeIf { it.length >= Route.MIN_NAME_LENGTH }?.let(::RouteName)
+    }
+}
+
+@ConsistentCopyVisibility // copy() is private too, so it cannot skip of()
+data class ElevationRange private constructor(val lowestMeters: Double, val highestMeters: Double) {
+    companion object {
+        fun of(first: Double, second: Double) = ElevationRange(minOf(first, second), maxOf(first, second))
+    }
+}
+```
+
 ---
 
 ## 2. Entities on a reactive client
@@ -58,6 +76,7 @@ DDD defines entities by identity. On a reactive client, model them as **immutabl
 - Structural equality is deliberate. `StateFlow` drops emissions equal to the current value, and Compose skips stable parameters that are unchanged.
 - Use the `id` when you mean identity: lazy-list keys (`items(photos, key = { it.id.value })`), diffing, "is this the same item?" checks.
 - A change produces a new instance (`route.finish(name, at = now)` returns a copy).
+- If only a factory may build an entity, make its constructor internal and add `@ConsistentCopyVisibility` (see section 1).
 
 ## 3. What usually doesn't pay off on clients
 
@@ -102,6 +121,7 @@ Prefer catching specific exception types. If you must catch broadly or use `runC
 
 - **Reflection:** don't write reflection-based mappers, factories, or service locators. Codegen libraries (Moshi codegen, kotlinx.serialization, Room) and libraries that ship consumer R8 rules (Retrofit) are fine. In KMP, full reflection (`kotlin-reflect`) isn't available on Kotlin/Native or JS, so shared code can't rely on it at all.
 - **DI:** use any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, or Koin, which resolves at runtime without reflection) or wire by hand. Hilt is Android-only, so shared KMP code needs one of the others.
+- **Value classes and Dagger:** Kotlin [mangles the name](https://kotlinlang.org/docs/inline-classes.html) of a function that takes a value class (`create-4DmrXe8`), and Dagger's generated Java code cannot use that name. So an assisted-injection parameter, such as the ID from a navigation key, takes the underlying type, and the ViewModel wraps it: `private val routeId = RouteId(id)`. This was checked with Dagger 2.60 and KSP.
 
 ---
 
