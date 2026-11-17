@@ -115,6 +115,44 @@ suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> =
 
 Prefer catching specific exception types. If you must catch broadly or use `runCatching`, rethrow `CancellationException` first.
 
+### Work that must finish after the user leaves
+
+`viewModelScope` is cancelled when the ViewModel is cleared, for example when the user closes the screen, and so is every suspend call made from it. That is right for loading the screen's data, but not for a save in several steps. `FinishRouteUseCase` stops the location tracker and then saves the route, so a cancel between the two leaves a route that is neither tracked nor finished. The [Android guide](https://developer.android.com/topic/architecture/data-layer) sorts operations by how long they must live:
+
+| Operation | Must live until | Run it in |
+| :--- | :--- | :--- |
+| UI-oriented (load the screen's data) | the user leaves the screen | `viewModelScope` |
+| App-oriented (a save in several steps, a cache refresh) | the app process ends | an injected application scope |
+| Business-oriented (an upload that must survive process death) | the work is done | WorkManager |
+
+For app-oriented work, inject the scope into the use case or repository that owns the work, not into the ViewModel, so that every caller gets the guarantee. The ViewModel still calls it from `viewModelScope`.
+
+```kotlin
+// FinishRouteUseCase from the examples, with the scope added
+class FinishRouteUseCase(
+    private val routeRepository: RouteRepository,
+    private val locationTracker: LocationTracker,
+    private val clock: Clock,
+    private val applicationScope: CoroutineScope, // a singleton: CoroutineScope(SupervisorJob() + Dispatchers.Default)
+) {
+    // If the user leaves, await() is cancelled, but the work inside async continues.
+    suspend operator fun invoke(routeId: RouteId, name: String): FinishRouteResult =
+        applicationScope.async { finish(routeId, name) }.await()
+
+    private suspend fun finish(routeId: RouteId, name: String): FinishRouteResult {
+        val route = routeRepository.getRoute(routeId) ?: return FinishRouteResult.NotFound
+        if (!route.canBeFinishedWith(name)) return FinishRouteResult.NameRejected
+        locationTracker.stop()
+        routeRepository.saveRoute(route.finish(name, at = clock.now()))
+        return FinishRouteResult.Finished
+    }
+}
+```
+
+- `SupervisorJob` keeps one failed operation from cancelling the scope for the others.
+- If the work fails after the user has left, nothing awaits it, and `async` ignores the scope's `CoroutineExceptionHandler`, so the error is lost. Log it inside `async` if you need it.
+- In tests, pass the `TestScope` as the application scope, so that the work runs on virtual time.
+
 ---
 
 ## 5. Reflection and dependency injection
