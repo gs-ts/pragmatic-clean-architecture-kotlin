@@ -153,9 +153,9 @@ Never write into derived state. Don't collect a data flow in `init` just to copy
 
 ## Text fields
 
-Value-based text fields (`value` and `onValueChange`) are deprecated. A state-based field edits a `TextFieldState`, which has no UI dependencies, and the [Compose docs](https://developer.android.com/develop/ui/compose/text/user-input) encourage holding it in the ViewModel. As with any state, hold it as low as possible while keeping the right owner:
-- **The ViewModel's logic reads the text** (validation, submit): hold the `TextFieldState` in the ViewModel. The field edits it directly, so typing needs no `Action`.
-- **Only the UI reads the text:** use `rememberTextFieldState()` in the composable.
+The [Compose docs](https://developer.android.com/develop/ui/compose/text/user-input) recommend state-based text fields, which need Compose Foundation 1.7, and Material 3 1.4 for the Material fields. A state-based field edits a `TextFieldState`, which has no UI dependencies, and the docs encourage holding it in the ViewModel. As with any state, hold it as low as possible while keeping the right owner:
+- **Only the UI reads the text:** use `rememberTextFieldState()` in the composable. It also restores the text after process death.
+- **The ViewModel's logic reads the text** (validation, submit): hold the `TextFieldState` in the ViewModel. The field edits it directly, so typing needs no `Action`. To keep the text after process death, save it in `SavedStateHandle`, as the [migration guide](https://developer.android.com/develop/ui/compose/text/migrate-state-based) notes.
 
 The `TextFieldState` holds only the field's own state, so the screen state can stay a `StateFlow`, as the Android guide recommends. Derive values from the text with `snapshotFlow`, as in the hybrid style:
 
@@ -187,7 +187,9 @@ private fun onFinishClicked() {
 }
 ```
 
-Two cases differ:
+Four cases differ:
+- **Older versions** (before Compose Foundation 1.7, or Material 3 1.4 for the Material fields): keep the value-based field. The text lives in the screen state, and each change is an `Action`.
+- **An existing screen that keeps the text in its state,** when moving it is not worth the change: the migration guide's "conforming approach" keeps the ViewModel as it is, uses `rememberTextFieldState()` in the composable, and sends each change as an `Action` from a `snapshotFlow` in a `LaunchedEffect`.
 - **A form that recomputes values on every keystroke** (several fields, with errors shown while the user types) may keep all its state in Compose state (`mutableStateOf`, `derivedStateOf`), as Google's [input-validation guide](https://developer.android.com/develop/ui/compose/quick-guides/content/validate-input) does. This saves copying each field into a flow, but it departs from the guide's "make `uiState` a `StateFlow`", so say why you chose it.
 - **A KMP ViewModel that SwiftUI also uses** keeps the text in a `StateFlow` instead, because Swift cannot observe Compose state, and `TextFieldState` is Compose state.
 
