@@ -66,7 +66,8 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - Map technical failures (`HttpException`, `SQLException`, SDK exceptions) to domain errors at the repository boundary.
 - **Never swallow cancellation.** When catching `Exception`/`Throwable` or using `runCatching` around suspend calls, rethrow `CancellationException`. Prefer catching specific exception types.
-- Inject dispatchers, `Clock`, and `TimeSource`. Don't call `Clock.System.now()` or `System.currentTimeMillis()` in repositories, use cases, or domain code.
+- **Pick the scope by how long the work must live.** Work for the screen runs in `viewModelScope` and stops when the ViewModel is cleared. Work that must finish once it has started, such as a save in several steps, runs in an injected application scope with `scope.async { ... }.await()`. Inject that scope into the use case or repository that owns the work, so that every caller gets the guarantee. Work that must survive process death goes to WorkManager.
+- Inject dispatchers, `Clock`, `TimeSource`, and ID generators. Don't call `Clock.System.now()` or `System.currentTimeMillis()`, or create random IDs, in repositories, use cases, or domain code.
 
 → Details: `references/tactical-ddd-kotlin.md`, `examples/AntiCorruptionAndSmartMapping.kt` (section 3)
 
