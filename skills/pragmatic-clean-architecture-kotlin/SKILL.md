@@ -91,7 +91,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 9. Tactical DDD and patterns
 
-- **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". When a value needs normalizing (trimmed, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility`, or the public `copy()` skips the factory.
+- **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". When a value needs normalizing (trimmed, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility` (from Kotlin 2.0.20), or the public `copy()` skips the factory.
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
 - **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
