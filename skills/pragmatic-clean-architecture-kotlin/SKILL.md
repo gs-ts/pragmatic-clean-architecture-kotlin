@@ -91,11 +91,11 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 9. Tactical DDD and patterns
 
-- **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0".
+- **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". When a value needs normalizing (trimmed, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility`, or the public `copy()` skips the factory.
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
 - **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
-- **DI:** any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, Koin) or manual wiring. Hilt is Android-only.
+- **DI:** any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, Koin) or manual wiring. Hilt is Android-only. Dagger and Hilt cannot take a value class as an assisted-injection parameter, so take the underlying value and wrap it inside.
 - **GoF patterns only for a concrete problem:** Strategy as `fun interface`, Decorator via `by` delegation, Factory as companion functions or assisted injection.
 
 → Details: `references/tactical-ddd-kotlin.md`
