@@ -11,11 +11,13 @@ This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and
 ## What the skill teaches
 
 - **Tactical DDD where it pays off:** domain rules on the model (Tell, Don't Ask), value objects for IDs and constrained values, `sealed` types that make impossible states unrepresentable, immutable entity snapshots, and names in the product's language.
-- **Project conventions first:** an existing codebase's conventions and explicit project instructions override the skill's defaults. In reviews, the skill suggests improvements instead of flagging deliberate conventions as defects.
+- **Project conventions first:** an existing codebase's conventions and explicit project instructions override the skill's defaults. In reviews, the skill suggests improvements instead of flagging deliberate conventions as defects. It also departs from a rule that does not pay off or that the project cannot use, and it never adds or upgrades a dependency only to follow one.
 - **Derived values in the right place:** domain model, Flow pipeline, ViewModel state, or composable, chosen by inputs and cost.
 - **Mapping at real boundaries:** mandatory for APIs and SDKs you don't control, with mappers that parse instead of throwing. UI state reuses domain models, with display values derived by getters.
 - **Compose performance without ceremony:** preserve instances under strong skipping instead of converting collections or adding UI models.
+- **Abstractions that wait for proof (AHA):** duplication over the wrong abstraction, no boolean mode flags in shared code, and no base class until three screens share a stable shape.
 - **Use cases that earn their keep:** no pass-throughs and no use-case interfaces.
+- **Coroutines that do not lose work:** technical failures mapped to domain errors, cancellation never swallowed, and the scope chosen by how long the work must live.
 - **Fakes over mocks:** sociable tests that fake the lowest I/O boundary, with virtual time and no real delays.
 - **Exposure-safe feature flags and A/B tests.**
 - **Kotlin Multiplatform:** shared domain code, DI without Hilt, and what survives the Swift boundary.
@@ -49,11 +51,11 @@ pragmatic-clean-architecture-kotlin/
 │       ├── SKILL.md                              # Ground rules, decision guides, workflows, checklist
 │       ├── LICENSE.txt
 │       ├── references/
-│       │   ├── domain-vs-state-derivation.md     # Derived values, state styles, Compose performance
+│       │   ├── domain-vs-state-derivation.md     # Derived values, state styles, text fields, Compose performance
 │       │   ├── aha-and-poodr-kotlin.md           # Wrong abstractions, base classes, sealed vs. polymorphism
 │       │   ├── smart-mapping-and-acl.md          # Boundary mapping and when a UI-specific type earns its place
 │       │   ├── feature-flags-and-ab-testing.md   # Experiment contracts and exposure-safe reads
-│       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, errors, DI, GoF patterns
+│       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, errors, coroutine scopes, DI, GoF patterns
 │       │   ├── use-cases-and-testing.md          # Use-case litmus test, fakes, virtual time, Macrobenchmark
 │       │   └── kmp.md                            # Kotlin Multiplatform and the Swift boundary
 │       └── examples/
@@ -81,7 +83,7 @@ Each agent looks for skills in its own folder:
 | Claude Code | `.claude/skills/` |
 | Cursor | `.agents/skills/` or `.cursor/skills/` |
 | GitHub Copilot | `.agents/skills/`, `.github/skills/`, or `.claude/skills/` |
-| Junie (JetBrains) | `.junie/skills/` |
+| Junie (JetBrains) | `.junie/skills/` (the Junie CLI also reads `.agents/skills/`) |
 
 The simplest setup is one copy in `.agents/skills/` and a link to it from `.claude/skills/`.
 
@@ -104,7 +106,7 @@ ln -s ../../.agents/skills/pragmatic-clean-architecture-kotlin .claude/skills/
 - To have it in every project, just for you, run the same commands from your home folder (`cd ~`) instead.
 - On Windows, copy the folder into `.claude/skills/` instead of linking it.
 
-Agents load the skill on their own when a request matches it. To call it explicitly, type `@pragmatic-clean-architecture-kotlin` in Gemini's Agent Mode, or `/pragmatic-clean-architecture-kotlin` in Claude Code or Cursor.
+Agents load the skill on their own when a request matches it. To call it explicitly, type `@pragmatic-clean-architecture-kotlin` in Gemini's Agent Mode, or `/pragmatic-clean-architecture-kotlin` in Claude Code, Cursor, or the Junie CLI.
 
 ### 2. Optional: always-on rules
 
@@ -136,7 +138,9 @@ scripts/build-adapters.sh --check  # exit 1 if ide-configs/ is out of date (for 
 - [Official Kotlin Documentation](https://kotlinlang.org/docs/home.html)
 - [Kotlin — Interoperability with Swift/Objective-C](https://kotlinlang.org/docs/native-objc-interop.html)
 - [Android Developers — Architecture Guide](https://developer.android.com/topic/architecture)
+- [Android Developers — Best practices for coroutines](https://developer.android.com/kotlin/coroutines/coroutines-best-practices)
 - [Android Developers — Fix Compose stability issues](https://developer.android.com/develop/ui/compose/performance/stability/fix)
+- [Android Developers — Configure text fields](https://developer.android.com/develop/ui/compose/text/user-input)
 
 ---
 
