@@ -50,7 +50,7 @@ data class Coordinates(
 }
 ```
 
-When a value needs normalizing (trimmed, sorted), make the constructor **private** and build instances only through the factory, so that every instance is normalized. With a public constructor, `RouteName(" Walk ")` would skip the trim, and two names that look the same would not be equal. A data class also generates a public `copy()` that skips the factory, so add `@ConsistentCopyVisibility` to make `copy()` private too. Without it, Kotlin 2.3 and 2.4 only warn, and the warning says that this becomes an error in language version 2.5.
+When a value needs normalizing (trimmed, sorted), make the constructor **private** and build instances only through the factory, so that every instance is normalized. With a public constructor, `RouteName(" Walk ")` would skip the trim, and two names that look the same would not be equal. A data class also generates a public `copy()` that skips the factory, so add `@ConsistentCopyVisibility` (from Kotlin 2.0.20) to make `copy()` private too. Without it, Kotlin 2.3 and 2.4 only warn, and the warning says that this becomes an error in language version 2.5.
 
 ```kotlin
 @JvmInline
