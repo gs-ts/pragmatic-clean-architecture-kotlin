@@ -28,12 +28,13 @@ A concise summary for engineers and tech leads evaluating Pragmatic Clean Archit
 * **Trustworthy experiment data**: Exposure-safe flag reads log an exposure only when a user reaches the experiment, so A/B results aren't diluted by users who never saw the variant, or skewed by users who saw both.
 
 ### Team and reviews
-* **A shared vocabulary for reviews**: The decision tables and checklist give human and AI reviewers the same reference, so reviews discuss trade-offs rather than taste. As an agent skill, it suggests improvements to existing features without forcing rewrites.
+* **A shared vocabulary for reviews**: The decision tables and checklist give human and AI reviewers the same reference, so reviews discuss trade-offs rather than taste. As an agent skill, it suggests improvements to existing features without forcing rewrites, and it departs from a rule that does not pay off or that the project cannot use, such as one that needs an API newer than the project's libraries.
 
 ---
 
 ## Honest Disadvantages & Trade-Offs
 
+* **The payoff depends on how much logic the app has**: A thin client that only shows what the backend decides, or a mostly technical app such as a camera tool, has few rules to move onto domain models. There, most of the gain is less ceremony and better tests.
 * **Structure varies by need**: In a rigid layout, every feature gets the same set of files whether it needs them or not (DTO, entity, domain model, repository interface and implementation, use case, UI model, mappers), so features look uniform and are easy to check mechanically. Here, one screen may have no use case or UI model while the next has both. Each of those calls takes judgment and an understanding of the principles behind the rules; the decision tables and checklist keep the calls consistent across a team.
 * **Fakes cost code up front and need upkeep**: A stateful fake takes more code on day one than `mockk<Repository>(relaxed = true)`, and it can drift from the real implementation. One fake per boundary is reused across many tests; for critical boundaries, run the same tests against the fake and the real implementation (for example, an in-memory database).
-* **Value objects add friction at the edges**: Wrapping and unwrapping happens in mappers and navigation arguments, and Swift sees the underlying primitive instead of the Kotlin type.
+* **Value objects add friction at the edges**: Wrapping and unwrapping happens in mappers and navigation arguments, Dagger and Hilt cannot take a value class as an assisted-injection parameter, and Swift sees the underlying primitive instead of the Kotlin type.
