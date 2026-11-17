@@ -161,5 +161,5 @@ Avoid standalone `AbstractFactory` hierarchies unless multiple families of relat
 
 ### State & Command → MVI (`State` + `sealed interface Action`)
 In Kotlin UI architecture, the Command and State patterns converge into unidirectional data flow (MVI):
-- Commands are a `sealed interface Action`, handled exhaustively in one `when (action)` block.
+- Commands are a `sealed interface Action`, handled exhaustively in one `when (action)` block. Text input is the exception: the field edits a `TextFieldState` in the ViewModel directly (see `domain-vs-state-derivation.md`).
 - State transitions are atomic updates of a `StateFlow<State>`: `update { it.copy(...) }`, or a fresh derived emission (see `domain-vs-state-derivation.md`).

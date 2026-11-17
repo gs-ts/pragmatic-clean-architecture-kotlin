@@ -33,6 +33,8 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **One state style per ViewModel.** Derived: `combine(...).stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)` when state comes from flows. Event-driven: `MutableStateFlow` + `update { it.copy(...) }` when it comes from user actions. Hybrid: UI-local state in a private `MutableStateFlow`, combined with the data flows. Never write into derived state.
 - **User input goes through `onAction(action: Action)`** with a `sealed interface Action`. Model navigation and other outcomes as state the UI consumes, unless the project already has an event pattern.
+- **Text fields edit a `TextFieldState`,** because value-based text fields are deprecated. When the ViewModel's logic reads the text (validation, submit), hold the `TextFieldState` in the ViewModel, as the Compose docs encourage; the field edits it directly, so typing needs no `Action`. Otherwise use `rememberTextFieldState()` in the composable. Keep the screen state a `StateFlow` and derive values from the text with `snapshotFlow`. A form that recomputes values on every keystroke may keep all its state in Compose state instead (`mutableStateOf`, `derivedStateOf`), as a stated deviation from the Android guide.
+- **A one-off action changes state before its first suspension point** (`isFinishing = true`), so that a second tap sees the change and does nothing.
 - **Preserve instances; don't convert collections.** With strong skipping, unstable parameters (`List`, classes from non-Compose modules) still skip when the same instance is passed. Compute lists once per relevant change and keep the instance when their inputs don't change. Don't switch to `ImmutableList`/`PersistentList`, add `@Immutable`, or add stability-config rules for collection-holding models by default: that forces element-by-element `equals()` on every recomposition. Reserve them for cases where you can't preserve references and a benchmark shows a win.
 
 → Details: `references/domain-vs-state-derivation.md`
@@ -147,7 +149,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] UI state reuses domain models; cheap display values are getters or functions, and UI-specific types exist only for a different shape, an expensive derivation, or a module boundary.
 - [ ] Locale-dependent text is formatted in the UI (or kept as `StringResource`/`UiText`), not in ViewModel-built strings.
 - [ ] Time comes from an injected `Clock`/`TimeSource` or a `now` parameter.
-- [ ] Each ViewModel uses one state style, receives input through a sealed `Action`, and never writes to derived state.
+- [ ] Each ViewModel uses one state style, receives input through a sealed `Action` (a text field may edit a `TextFieldState` that the ViewModel holds), and never writes to derived state.
 - [ ] No `else` branch in a `when` over a sealed type the project owns.
 - [ ] Shared abstractions have no boolean mode flags; no new base class without 3+ proven, flag-free uses.
 - [ ] Flag keys stay in the data layer; exposure-logging reads are functions called at the decision point; parent flags are read once per screen.

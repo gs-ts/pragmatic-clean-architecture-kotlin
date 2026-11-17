@@ -24,7 +24,7 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 - [ ] UI state reuses domain models; cheap display values are getters or functions, and UI-specific types exist only for a different shape, an expensive derivation, or a module boundary.
 - [ ] Locale-dependent text is formatted in the UI (or kept as `StringResource`/`UiText`), not in ViewModel-built strings.
 - [ ] Time comes from an injected `Clock`/`TimeSource` or a `now` parameter.
-- [ ] Each ViewModel uses one state style, receives input through a sealed `Action`, and never writes to derived state.
+- [ ] Each ViewModel uses one state style, receives input through a sealed `Action` (a text field may edit a `TextFieldState` that the ViewModel holds), and never writes to derived state.
 - [ ] No `else` branch in a `when` over a sealed type the project owns.
 - [ ] Shared abstractions have no boolean mode flags; no new base class without 3+ proven, flag-free uses.
 - [ ] Flag keys stay in the data layer; exposure-logging reads are functions called at the decision point; parent flags are read once per screen.
