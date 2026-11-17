@@ -1,6 +1,6 @@
 ---
 name: pragmatic-clean-architecture-kotlin
-description: Applies tactical Domain-Driven Design and pragmatic Clean Architecture to Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform) where they pay off. Use when adding a screen or feature, or when creating or reviewing domain models, ViewModels, UI state, repositories, use cases, mappers, feature flags and A/B tests, or unit tests. When reviewing existing code, it suggests concrete improvements (value objects, rules on the domain model, boundary mapping, less ceremony) with their trade-offs instead of demanding rewrites. Triggers include "review this feature", "how can I improve this domain model", "where should this logic live", "do I need a use case", and "replace MockK with fakes". Defers to the project's existing conventions.
+description: Applies tactical Domain-Driven Design and pragmatic Clean Architecture to Kotlin client apps (Android, Jetpack Compose, Kotlin Multiplatform) where they pay off. Use when adding a screen or feature, or when creating or reviewing domain models, ViewModels, UI state, repositories, use cases, mappers, feature flags and A/B tests, workflows that run on the device (status changes, background work that must survive a crash), or unit tests. When reviewing existing code, it suggests concrete improvements (value objects, rules on the domain model, boundary mapping, less ceremony) with their trade-offs instead of demanding rewrites. Triggers include "review this feature", "how can I improve this domain model", "where should this logic live", "do I need a use case", "replace MockK with fakes", and "make this upload survive a crash". Defers to the project's existing conventions.
 license: MIT (see LICENSE.txt)
 ---
 
@@ -93,7 +93,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0".
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
-- **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
+- **Usually skip on clients:** aggregates with transactional boundaries (unless the client owns the workflow, section 11), domain events, and domain-service layers.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
 - **DI:** any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, Koin) or manual wiring. Hilt is Android-only.
 - **GoF patterns only for a concrete problem:** Strategy as `fun interface`, Decorator via `by` delegation, Factory as companion functions or assisted injection.
@@ -108,6 +108,18 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - Full reflection isn't available on Kotlin/Native or JS, and MockK is JVM-only, so fakes are the portable default.
 
 → Details: `references/kmp.md`
+
+## 11. Workflows the client owns
+
+The client owns a workflow only while its data exists only on the device: before the server has accepted the data (an upload, a form sent later), or when the data never leaves the device. Otherwise the server runs the workflow, and the client shows its status.
+
+- **Each status offers only its legal moves.** Model the statuses as a `sealed interface`, and give each status one function per legal move, which returns the change (`Queued.photosUploaded()`), so an illegal move does not compile. This is not the State pattern, in which every state accepts every request and ignores the invalid ones. For a few statuses that rarely change, an enum is enough.
+- **Check and write in one transaction** when a duplicate or an overwritten change would do harm: the repository saves a change only if the stored status is still the one that the change starts from. This is not "last write wins", which the server uses to resolve conflicting writes from several devices during sync.
+- **Make every step safe to repeat.** Call the server once per step, save the step before the next one, and continue from the saved status. A call that changes server data sends an idempotency key, which is created once, when the work is queued. Retry only temporary errors, such as no connection, and end the workflow when the server refuses the data. Anything else is most likely a bug, so let it fail the work. On Android, schedule the work as unique work with `ExistingWorkPolicy.KEEP`.
+- **Keep a history only when you need an audit trail,** and derive the status from its latest entry.
+- **Test crashes and races with fakes:** a repository that throws before or after a chosen save, and a competing change while a step runs. Fake the repository itself, because a fake DAO cannot reproduce a transaction.
+
+→ Details: `references/client-owned-workflows.md`, `examples/ClientOwnedWorkflow.kt`, `examples/ClientOwnedWorkflowTest.kt`
 
 ## Workflow: adding a feature
 
@@ -141,6 +153,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
+- [ ] A write that depends on the current state checks that state in the same transaction, when a duplicate or an overwritten change would do harm.
 - [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or is shared; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
@@ -163,4 +176,5 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors and cancellation, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
-- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.
+- `references/client-owned-workflows.md`: when the client owns a workflow, legal moves per status, checked writes, steps that survive a crash, an audit history, and crash and race tests.
+- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, fakes with a test suite, and a route upload that survives crashes and races. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test files also need kotlin-test, kotlinx-coroutines-test, and Turbine.

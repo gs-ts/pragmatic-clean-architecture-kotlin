@@ -18,6 +18,7 @@ This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and
 - **Use cases that earn their keep:** no pass-throughs and no use-case interfaces.
 - **Fakes over mocks:** sociable tests that fake the lowest I/O boundary, with virtual time and no real delays.
 - **Exposure-safe feature flags and A/B tests.**
+- **Workflows the client owns:** statuses that offer only their legal moves, checked writes, and steps that survive a crash.
 - **Kotlin Multiplatform:** shared domain code, DI without Hilt, and what survives the Swift boundary.
 
 The full rules live in [`skills/pragmatic-clean-architecture-kotlin/SKILL.md`](./skills/pragmatic-clean-architecture-kotlin/SKILL.md).
@@ -55,13 +56,16 @@ pragmatic-clean-architecture-kotlin/
 │       │   ├── feature-flags-and-ab-testing.md   # Experiment contracts and exposure-safe reads
 │       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, errors, DI, GoF patterns
 │       │   ├── use-cases-and-testing.md          # Use-case litmus test, fakes, virtual time, Macrobenchmark
-│       │   └── kmp.md                            # Kotlin Multiplatform and the Swift boundary
+│       │   ├── kmp.md                            # Kotlin Multiplatform and the Swift boundary
+│       │   └── client-owned-workflows.md         # Legal moves, checked writes, steps that survive a crash
 │       └── examples/
 │           ├── RichDomainVsReactiveState.kt      # Domain rules vs. reactive ViewModel state
 │           ├── AntiCorruptionAndSmartMapping.kt  # Database and remote API mapping, error translation, UI-state reuse
 │           ├── FeatureFlagsAndExperiments.kt     # Experiment contracts and exposure-safe reads
 │           ├── PragmaticTestingWithFakes.kt      # Per-key deduplication, a real use case, fakes
-│           └── PragmaticTestingWithFakesTest.kt  # Sociable tests with virtual time and Turbine
+│           ├── PragmaticTestingWithFakesTest.kt  # Sociable tests with virtual time and Turbine
+│           ├── ClientOwnedWorkflow.kt            # A route upload that survives crashes and races
+│           └── ClientOwnedWorkflowTest.kt        # Crash and race tests with fakes
 ├── ide-configs/                                  # Generated from SKILL.md; don't edit by hand
 │   ├── copilot-instructions.md
 │   └── AGENTS.md

@@ -65,7 +65,7 @@ DDD defines entities by identity. On a reactive client, model them as **immutabl
 - **Domain events and event buses:** reactive streams (`Flow`) already propagate change.
 - **Domain-service layers:** a use case or a method on the model covers most cases.
 
-Reach for them only when the client really owns the invariant (for example, offline-first editing with local conflict rules).
+Reach for them only when the client really owns the invariant: for example, offline-first editing with local conflict rules, or a workflow that runs on the device (see `client-owned-workflows.md`).
 
 ---
 
