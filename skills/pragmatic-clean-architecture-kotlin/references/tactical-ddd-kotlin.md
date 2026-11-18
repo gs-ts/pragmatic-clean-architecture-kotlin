@@ -8,7 +8,7 @@ Apply the tactical DDD patterns that pay off on clients, and Gang of Four patter
 
 Primitive obsession (`Long`, `String`, `Double` passed everywhere) causes mix-ups: a `routeId` passed where a `photoId` was expected, latitude and longitude swapped.
 
-- Wrap identifiers and constrained primitives in `@JvmInline value class`.
+- Wrap identifiers, keys, and primitives whose format, range or unit other code relies on (a hash, a latitude, a distance) in `@JvmInline value class`. Display text stays a `String`; see "When a `String` is enough" below.
 - Validate **genuine domain invariants** in `init` (a blank place ID, an out-of-range latitude). Don't validate storage details: "ID > 0" is a database autoincrement convention, and it makes unsaved entities (Room's `id = 0` default before insert) impossible to represent.
 - Give each validating type a **non-throwing factory** (`parse`) for boundary code, so mappers can apply a policy instead of crashing (see `smart-mapping-and-acl.md`).
 - On the JVM there's usually no allocation; values are boxed when nullable (`RouteId?`), used as a generic type argument, or used through an interface.
@@ -50,13 +50,15 @@ data class Coordinates(
 }
 ```
 
-When a value needs normalizing (trimmed, sorted), make the constructor **private** and build instances only through the factory, so that every instance is normalized. With a public constructor, `RouteName(" Walk ")` would skip the trim, and two names that look the same would not be equal. A data class also generates a public `copy()` that skips the factory, so add `@ConsistentCopyVisibility` (from Kotlin 2.0.20) to make `copy()` private too. Without it, Kotlin 2.3 and 2.4 only warn, and the warning says that this becomes an error in language version 2.5.
+**When a `String` is enough.** Text the user types and reads, such as a route name, a title or a note, has input limits (trimmed, not blank, a maximum length), but no code compares it, looks it up, or branches on it. Breaking a limit only makes the text look wrong. Keep it a `String`, and keep the limits in one place: a function, or a rule on the model (`Route.canBeFinishedWith` in `examples/RichDomainVsReactiveState.kt`). Make it a value class once other code relies on it: the text becomes a key (unique names, tags) or gets a format (an email address, a URL, a file name).
+
+When a value object needs normalizing (trimmed, lowercased, sorted), make the constructor **private** and build instances only through the factory, so that every instance is normalized. A tag is text the user types too, but filters compare tags, so it's a key. With a public constructor, `Tag(" Hiking")` would skip the normalizing, and a filter for `hiking` would miss that route. A data class also generates a public `copy()` that skips the factory, so add `@ConsistentCopyVisibility` (from Kotlin 2.0.20) to make `copy()` private too. Without it, Kotlin 2.3 and 2.4 only warn, and the warning says that this becomes an error in language version 2.5.
 
 ```kotlin
 @JvmInline
-value class RouteName private constructor(val value: String) {
+value class Tag private constructor(val value: String) { // a key: filters compare tags
     companion object {
-        fun parse(raw: String): RouteName? = raw.trim().takeIf { it.length >= Route.MIN_NAME_LENGTH }?.let(::RouteName)
+        fun parse(raw: String): Tag? = raw.trim().lowercase().takeIf { it.isNotEmpty() }?.let(::Tag)
     }
 }
 

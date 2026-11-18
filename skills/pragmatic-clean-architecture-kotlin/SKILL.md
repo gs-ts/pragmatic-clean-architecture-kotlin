@@ -94,7 +94,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 9. Tactical DDD and patterns
 
-- **Value objects:** `@JvmInline value class` for IDs and constrained values. Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". When a value needs normalizing (trimmed, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility` (from Kotlin 2.0.20), or the public `copy()` skips the factory.
+- **Value objects:** `@JvmInline value class` for IDs and keys, and for values whose format, range or unit other code relies on (a hash, a latitude, a distance). Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". Display text, such as a route name or a note, stays a `String` even when its input has limits (trimmed, not blank, a maximum length): keep the limits in one function, or in a rule on the model. When a value object needs normalizing (trimmed, lowercased, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility` (from Kotlin 2.0.20), or the public `copy()` skips the factory.
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
 - **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
@@ -127,7 +127,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 1. Read the project's conventions, then the feature end to end: domain models, repository, use cases, ViewModel, UI, and tests.
 2. Walk the checklist below, and look for domain-modeling opportunities in particular:
-   - primitives that should be value objects (IDs, amounts, coordinates);
+   - primitives that should be value objects (IDs, amounts, coordinates), but not display text such as names and titles;
    - rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask);
    - boolean or nullable combinations that a `sealed` type would make impossible;
    - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
@@ -140,7 +140,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 ## Checklist (write and review against these)
 
 - [ ] Follows the project's existing conventions; changes stay within the requested scope.
-- [ ] Domain concepts are explicit and named in the product's language: IDs and constrained values are value objects, rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
+- [ ] Domain concepts are explicit and named in the product's language: IDs, keys, and values with a format, range or unit are value objects (display text stays a `String`), rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.

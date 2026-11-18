@@ -14,7 +14,7 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 ## Checklist (write and review against these)
 
 - [ ] Follows the project's existing conventions; changes stay within the requested scope.
-- [ ] Domain concepts are explicit and named in the product's language: IDs and constrained values are value objects, rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
+- [ ] Domain concepts are explicit and named in the product's language: IDs, keys, and values with a format, range or unit are value objects (display text stays a `String`), rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
