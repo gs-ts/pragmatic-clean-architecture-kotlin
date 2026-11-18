@@ -32,7 +32,7 @@ At the edge of the shared module, expose a thin, Swift-friendly API (plain types
 
 ## 5. Formatting and resources
 
-Keep `StringResource` (Compose Multiplatform resources) or your own `UiText` in state, and resolve it in the UI on each platform at render time.
+Keep `StringResource` (Compose Multiplatform resources) or your own `UiText` in state for text the ViewModel chooses, such as which error to show, and resolve it in the UI on each platform at render time. Text the UI can pick on its own, such as the title of an unnamed route, needs nothing in state.
 
 ## 6. Testing
 

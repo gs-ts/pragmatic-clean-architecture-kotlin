@@ -65,27 +65,19 @@ Every screen has a `State`. The question is whether it holds domain models direc
 
 ### Default: reuse domain models, derive display values on read
 1. Put domain models in `State` as they are, next to screen-local state.
-2. Derive cheap display values (a title fallback, a badge flag, "is this row selected?") as getters or functions on `State`, or as UI-layer extension properties on the domain model. Keep them O(1) (see `domain-vs-state-derivation.md`). They need no mapper, and they can't drift from their source.
-3. For selection or expansion, keep a `Set<Id>` next to the reused list. Wrapping every item (`PhotoItem(photo, isSelected)`) creates a new wrapper for every row on each toggle, so no row can skip by identity.
+2. Derive cheap display values (a badge flag, "is this row selected?") as getters or functions on `State`, or as UI-layer extension properties on the domain model. Keep them O(1) (see `domain-vs-state-derivation.md`). They need no mapper, and they can't drift from their source.
+3. Resolve fallback text in the composable. An unnamed route's title comes from a string resource, so the composable resolves it, and the text follows locale changes (see `domain-vs-state-derivation.md`, Rule 5): `Text(route.displayName ?: stringResource(R.string.untitled_route))`. `State` needs no type to carry that choice. `UiText` or `StringResource` in state is for messages the ViewModel chooses, such as which error to show.
+4. For selection or expansion, keep a `Set<Id>` next to the reused list. Wrapping every item (`PhotoItem(photo, isSelected)`) creates a new wrapper for every row on each toggle, so no row can skip by identity.
 
 Compose stability is **not** a criterion. Under strong skipping (the default since Kotlin 2.0.20), classes from non-Compose modules and plain `List`s still skip when the same instance is passed. Keep instances stable instead (see `domain-vs-state-derivation.md`).
 
 ```kotlin
-/** A typed title. The composable turns it into text, so it follows locale changes. */
-sealed interface RouteTitle {
-    data class Custom(val name: String) : RouteTitle
-    data object Untitled : RouteTitle // e.g. stringResource(R.string.untitled_route) in the UI
-}
-
 data class RouteDetailState(
-    val route: Route, // reused as-is; the composable formats route.createdAt
+    val route: Route, // reused as-is; the composable formats route.createdAt and resolves the fallback title
     val photos: List<PhotoMetadata>, // reused as-is: no PhotoUiModel
     val selectedPhotoIds: Set<PhotoId> = emptySet(), // per-item UI state without wrapping every photo
 ) {
-    // Cheap (O(1)) display values, derived on read: no UI model, no mapper.
-    val title: RouteTitle
-        get() = route.displayName?.let(RouteTitle::Custom) ?: RouteTitle.Untitled
-
+    // A cheap (O(1)) display value, derived on read: no UI model, no mapper.
     fun isSelected(photo: PhotoMetadata): Boolean = photo.id in selectedPhotoIds
 }
 ```
