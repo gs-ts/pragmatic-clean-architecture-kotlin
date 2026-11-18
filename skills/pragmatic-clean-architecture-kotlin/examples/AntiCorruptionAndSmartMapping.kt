@@ -200,25 +200,19 @@ class RemoteNearbyPlacesRepository(
 // ============================================================================
 // 4. DOMAIN -> UI: the screen state reuses domain models. Cheap display values
 //    are getters and functions on State, so there's no UI model and no mapper.
+//    Fallback text comes from string resources, so the composable resolves it
+//    and it follows locale changes, with no type in State:
+//      Text(route.displayName ?: stringResource(R.string.untitled_route))
 //    A UI-specific type earns its place only for a different shape (photos
 //    grouped under place headers, for example) or a derivation too expensive
 //    for a getter, and it would still hold PhotoMetadata, not a copy.
 // ============================================================================
 
-/** A typed title. The composable turns it into text, so it follows locale changes. */
-sealed interface RouteTitle {
-    data class Custom(val name: String) : RouteTitle
-    data object Untitled : RouteTitle
-}
-
 data class RouteDetailState(
-    val route: Route, // reused as-is; the composable formats route.createdAt
+    val route: Route, // reused as-is; the composable formats route.createdAt and resolves the fallback title
     val photos: List<PhotoMetadata>, // reused as-is: no PhotoUiModel
     val selectedPhotoIds: Set<PhotoId> = emptySet(), // per-item UI state without wrapping every photo
 ) {
-    // Cheap (O(1)) display values, derived on read.
-    val title: RouteTitle
-        get() = route.displayName?.let(RouteTitle::Custom) ?: RouteTitle.Untitled
-
+    // A cheap (O(1)) display value, derived on read.
     fun isSelected(photo: PhotoMetadata): Boolean = photo.id in selectedPhotoIds
 }
