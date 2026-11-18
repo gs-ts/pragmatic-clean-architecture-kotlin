@@ -106,9 +106,11 @@ sealed class PhotoMetadataException(message: String, cause: Throwable? = null) :
 **Never swallow cancellation.** `CancellationException` is how coroutines stop. A broad `catch (e: Exception)` or `runCatching` around a suspend call catches it too, and turns a cancelled screen into an error state or a retry.
 
 ```kotlin
+// RemoteNearbyPlacesRepository from examples/AntiCorruptionAndSmartMapping.kt, with exceptions instead of NearbyPlacesResult
 suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> =
     try {
-        placesClient.searchNearby(location)
+        api.searchNearby(location.latitude, location.longitude, radiusMeters)
+            .places.orEmpty().mapNotNull { it.toDomainOrNull() }
     } catch (e: CancellationException) {
         throw e // let cancellation propagate
     } catch (e: Exception) {
@@ -174,15 +176,15 @@ Don't introduce a GoF pattern preemptively. Apply one **only** when a concrete v
 Use when an algorithm varies at runtime or across build or platform targets (location throttling for walking vs. driving, photo deduplication rules).
 
 ```kotlin
-fun interface PlaceSelectionStrategy {
-    suspend fun selectPlace(
+fun interface PlaceMatchingStrategy {
+    suspend fun matchPlace(
         candidates: List<PlaceCandidate>,
         isAlreadySaved: suspend (PlaceId) -> Boolean,
     ): PlaceCandidate?
 }
 
 // Default strategy: the first candidate not yet saved for this route
-val FirstUnsavedPlaceStrategy = PlaceSelectionStrategy { candidates, isAlreadySaved ->
+val FirstUnsavedPlaceMatching = PlaceMatchingStrategy { candidates, isAlreadySaved ->
     candidates.firstOrNull { candidate -> !isAlreadySaved(candidate.placeId) }
 }
 ```
@@ -191,22 +193,23 @@ val FirstUnsavedPlaceStrategy = PlaceSelectionStrategy { candidates, isAlreadySa
 Use for cross-cutting concerns (in-memory caching, logging, telemetry, retries) on a repository or client, without bloating the core class.
 
 ```kotlin
-class CachingPlacesClient(
-    private val delegate: PlacesClient,
+// PlacesRemoteClient is the interface in examples/PragmaticTestingWithFakes.kt.
+class CachingPlacesRemoteClient(
+    private val delegate: PlacesRemoteClient,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val ttl: Duration = 5.minutes,
-) : PlacesClient by delegate {
+) : PlacesRemoteClient by delegate {
 
     private val lock = Mutex() // guards the map only; never held during network I/O
     private val cache = mutableMapOf<PlaceId, Entry>()
 
     private class Entry(val photoUri: String, val storedAt: TimeMark)
 
-    override suspend fun fetchPhotoUri(placeId: PlaceId): String? {
+    override suspend fun fetchFreshPhotoUri(placeId: PlaceId): String? {
         val cached = lock.withLock { cache[placeId] }
         if (cached != null && cached.storedAt.elapsedNow() < ttl) return cached.photoUri
 
-        val fresh = delegate.fetchPhotoUri(placeId) ?: return null
+        val fresh = delegate.fetchFreshPhotoUri(placeId) ?: return null
         lock.withLock { cache[placeId] = Entry(fresh, timeSource.markNow()) }
         return fresh
     }
