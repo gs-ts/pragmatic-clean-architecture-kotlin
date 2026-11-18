@@ -59,7 +59,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 5. Use cases
 
-- Write one when it orchestrates 2+ repositories or services, enforces a domain policy across steps, is reused by several ViewModels, or (in KMP) is the shared home for logic that iOS would otherwise duplicate.
+- Write one when it orchestrates 2+ repositories or services, enforces a domain policy across steps, holds logic that several ViewModels would otherwise duplicate, or (in KMP) is the shared home for logic that iOS would otherwise reimplement in Swift.
 - Delete one-line pass-throughs and inject the repository instead, unless the codebase's convention requires them. Use cases don't need interfaces; fake their dependencies.
 
 → Details: `references/use-cases-and-testing.md`
@@ -71,7 +71,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - **Pick the scope by how long the work must live.** Work for the screen runs in `viewModelScope` and stops when the ViewModel is cleared. Work that must finish once it has started, such as a save in several steps, runs in an injected application scope with `scope.async { ... }.await()`. Inject that scope into the use case or repository that owns the work, so that every caller gets the guarantee. Work that must survive process death goes to WorkManager on Android.
 - Inject dispatchers, `Clock`, `TimeSource`, and ID generators. Don't call `Clock.System.now()` or `System.currentTimeMillis()`, or create random IDs, in repositories, use cases, or domain code.
 
-→ Details: `references/tactical-ddd-kotlin.md`, `examples/AntiCorruptionAndSmartMapping.kt` (section 3)
+→ Details: `references/tactical-ddd-kotlin.md`, `examples/AntiCorruptionAndSmartMapping.kt` (section 3), `examples/PragmaticTestingWithFakes.kt` (section 2)
 
 ## 7. Testing with fakes
 
@@ -120,7 +120,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 4. **Use case:** only if it passes section 5.
 5. **ViewModel:** one state style, a `sealed interface Action`, derived lists built from their own inputs.
 6. **UI:** reuse domain models in state, derive cheap display values with getters, and format locale-dependent values in composables.
-7. **Tests:** sociable ViewModel or use-case tests with fakes at the lowest I/O boundary and virtual time.
+7. **Tests:** sociable ViewModel or use-case tests with fakes (the lowest I/O boundary, or the repository when it's thin) and virtual time.
 8. **Summary:** mention any deviations from these defaults and why.
 
 ## Workflow: reviewing an existing feature
@@ -144,7 +144,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
-- [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or is shared; no pass-throughs and no use-case interfaces.
+- [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or holds logic its callers would otherwise duplicate; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
 - [ ] UI state reuses domain models; cheap display values are getters or functions, and UI-specific types exist only for a different shape, an expensive derivation, or a module boundary.
@@ -154,16 +154,16 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] No `else` branch in a `when` over a sealed type the project owns.
 - [ ] Shared abstractions have no boolean mode flags; no new base class without 3+ proven, flag-free uses.
 - [ ] Flag keys stay in the data layer; exposure-logging reads are functions called at the decision point; parent flags are read once per screen.
-- [ ] Tests use fakes at the lowest I/O boundary, assert on state, and use virtual time (no `Thread.sleep`, no real delays).
+- [ ] Tests use fakes (the lowest I/O boundary, or the repository when it's thin), assert on state, and use virtual time (no `Thread.sleep`, no real delays).
 <!-- END CHECKLIST -->
 
 ## Reference and example files
 
-- `references/domain-vs-state-derivation.md`: derived values, ViewModel state styles, and Compose performance under strong skipping.
+- `references/domain-vs-state-derivation.md`: derived values, ViewModel state styles, text fields, and Compose performance under strong skipping.
 - `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask, and `sealed` vs. polymorphism.
 - `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI-specific type earns its place.
 - `references/feature-flags-and-ab-testing.md`: experiment contracts, exposure-safe reads, and inline branches vs. Strategy.
-- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors and cancellation, reflection, DI, and GoF patterns.
+- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
 - `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.

@@ -33,11 +33,18 @@ fun Route.toCommonUiModel(
     // ... tangled conditional branches ...
 }
 
-// GOOD: focused models/mappers per screen.
+// GOOD: inline it back. Each screen keeps only its own branch, with no flags and no shared model.
 // Share only genuinely identical, unconditional building blocks.
-fun Route.toActiveTrackingUiState(): ActiveTrackingUiState = ...
-fun Route.toPastRouteSummaryUiState(): PastRouteSummaryUiState = ...
+
+// Past route screen
+Text(route.displayName ?: stringResource(R.string.past_route))
+ShareButton(onClick = onShareClick)
+
+// Active route screen
+Text(overrideTitle ?: stringResource(R.string.tracking_now))
 ```
+
+Each screen keeps `Route` in its `State` and derives what it shows. A screen gets its own UI type when it needs a different shape, an expensive derivation, or a module boundary: see `smart-mapping-and-acl.md`, section 2.
 
 ---
 

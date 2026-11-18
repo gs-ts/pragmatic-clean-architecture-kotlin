@@ -7,9 +7,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -20,6 +22,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -90,7 +93,7 @@ class PragmaticTestingWithFakesTest {
     fun finishingARouteStopsTrackingAndSavesTheTrimmedName() = runTest {
         val dao = FakeRouteDao().apply { upsertRoute(ongoingRoute(id = 1)) }
         val tracker = FakeLocationTracker()
-        val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock)
+        val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock, applicationScope = this)
 
         val result = finishRoute(RouteId(1), name = "  Morning walk ")
 
@@ -105,11 +108,26 @@ class PragmaticTestingWithFakesTest {
     fun aTooShortNameIsRejectedAndNothingChanges() = runTest {
         val dao = FakeRouteDao().apply { upsertRoute(ongoingRoute(id = 1)) }
         val tracker = FakeLocationTracker()
-        val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock)
+        val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock, applicationScope = this)
 
         assertEquals(FinishRouteResult.NameRejected, finishRoute(RouteId(1), name = "ab"))
         assertTrue(tracker.isTracking)
         assertNull(dao.getRoute(1)!!.finishedAtEpochMillis)
+    }
+
+    @Test
+    fun finishingCompletesEvenIfTheCallerIsCancelled() = runTest {
+        val dao = FakeRouteDao().apply { upsertRoute(ongoingRoute(id = 1)) }
+        val tracker = FakeLocationTracker(stopLatency = 1.seconds)
+        val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock, applicationScope = this)
+
+        val caller = launch { finishRoute(RouteId(1), name = "Morning walk") }
+        advanceTimeBy(500.milliseconds) // the tracker is still stopping
+        caller.cancel() // the user leaves the screen
+        advanceUntilIdle()
+
+        assertFalse(tracker.isTracking)
+        assertEquals(fixedNow.toEpochMilliseconds(), dao.getRoute(1)!!.finishedAtEpochMillis)
     }
 
     private fun TestScope.activeRouteViewModel(

@@ -18,7 +18,7 @@ This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and
 - **Abstractions that wait for proof (AHA):** duplication over the wrong abstraction, no boolean mode flags in shared code, and no base class until three screens share a stable shape.
 - **Use cases that earn their keep:** no pass-throughs and no use-case interfaces.
 - **Coroutines that do not lose work:** technical failures mapped to domain errors, cancellation never swallowed, and the scope chosen by how long the work must live.
-- **Fakes over mocks:** sociable tests that fake the lowest I/O boundary, with virtual time and no real delays.
+- **Fakes over mocks:** sociable tests that fake the lowest I/O boundary (or a thin repository), with virtual time and no real delays.
 - **Exposure-safe feature flags and A/B tests.**
 - **Kotlin Multiplatform:** shared domain code, DI without Hilt, and what survives the Swift boundary.
 
