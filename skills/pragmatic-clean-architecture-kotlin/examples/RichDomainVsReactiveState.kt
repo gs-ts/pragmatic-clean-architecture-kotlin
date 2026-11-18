@@ -16,7 +16,10 @@ import kotlin.time.Instant
 // Requires Kotlin 2.3+ (stable kotlin.time.Instant) and kotlinx-coroutines.
 
 // ============================================================================
-// 1. VALUE OBJECTS: strong typing; validate genuine domain invariants only
+// 1. VALUE OBJECTS: strong typing; validate genuine domain invariants only.
+//    IDs get value classes. Display text (Route.displayName) and values that are
+//    only passed along (PhotoMetadata.photoUri, Route.distanceMeters) stay
+//    primitives: see references/tactical-ddd-kotlin.md, section 1.
 // ============================================================================
 
 // No `value > 0` check: "positive" is a database autoincrement detail, and it would
