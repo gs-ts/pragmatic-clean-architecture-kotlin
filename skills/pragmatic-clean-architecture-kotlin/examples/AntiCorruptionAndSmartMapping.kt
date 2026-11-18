@@ -35,7 +35,10 @@ data class RouteWithPhotosEntity(
     val photos: List<PhotoMetadataEntity>,
 )
 
-/** The lowest I/O boundary we own. Sociable tests fake this, not the repository. */
+/**
+ * The lowest I/O boundary we own. LocalRouteRepository below maps rows and drops invalid ones,
+ * so sociable tests fake this, not the repository.
+ */
 interface RouteDao {
     fun observeRouteWithPhotos(routeId: Long): Flow<RouteWithPhotosEntity?>
     suspend fun getRoute(routeId: Long): RouteEntity?

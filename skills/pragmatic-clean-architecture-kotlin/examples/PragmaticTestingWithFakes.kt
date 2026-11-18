@@ -1,6 +1,8 @@
 package com.example.pragmatic.examples
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +82,8 @@ interface PhotoUriDao {
 // 2. A USE CASE THAT EARNS ITS KEEP
 //    It orchestrates a repository and a platform service, enforces a domain rule,
 //    and takes time from an injected Clock. A one-line repository call wouldn't qualify.
+//    Once started, both steps must happen, so they run in an injected application
+//    scope: leaving the screen cancels the caller's await(), not the work.
 // ============================================================================
 
 interface LocationTracker {
@@ -96,8 +100,13 @@ class FinishRouteUseCase(
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
     private val clock: Clock,
+    private val applicationScope: CoroutineScope, // a singleton: CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
-    suspend operator fun invoke(routeId: RouteId, name: String): FinishRouteResult {
+    // If the user leaves, await() is cancelled, but the work inside async continues.
+    suspend operator fun invoke(routeId: RouteId, name: String): FinishRouteResult =
+        applicationScope.async { finish(routeId, name) }.await()
+
+    private suspend fun finish(routeId: RouteId, name: String): FinishRouteResult {
         val route = routeRepository.getRoute(routeId) ?: return FinishRouteResult.NotFound
         if (!route.canBeFinishedWith(name)) return FinishRouteResult.NameRejected
         locationTracker.stop()
@@ -133,11 +142,14 @@ class FakeRouteDao : RouteDao {
     }
 }
 
-class FakeLocationTracker : LocationTracker {
+class FakeLocationTracker(
+    private val stopLatency: Duration = Duration.ZERO,
+) : LocationTracker {
     var isTracking: Boolean = true
         private set
 
     override suspend fun stop() {
+        delay(stopLatency) // virtual time under runTest
         isTracking = false
     }
 }

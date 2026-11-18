@@ -96,9 +96,9 @@ Reach for them only when the client really owns the invariant (for example, offl
 Don't let raw `SQLException`, `HttpException`, or SDK `ApiException` escape the data layer. Map them at the repository boundary to domain exceptions or a `sealed interface` result hierarchy.
 
 ```kotlin
+// Failures only: finding nothing is an empty list, not an exception.
 sealed class PhotoMetadataException(message: String, cause: Throwable? = null) : Exception(message, cause) {
     class PlacesUnavailable(cause: Throwable? = null) : PhotoMetadataException("Nearby places unavailable", cause)
-    class PhotoMetadataUnavailable : PhotoMetadataException("No new photos available for location")
     class PlaceIdInvalid(val placeId: PlaceId) : PhotoMetadataException("Place ID ${placeId.value} is no longer valid")
 }
 ```
@@ -106,9 +106,11 @@ sealed class PhotoMetadataException(message: String, cause: Throwable? = null) :
 **Never swallow cancellation.** `CancellationException` is how coroutines stop. A broad `catch (e: Exception)` or `runCatching` around a suspend call catches it too, and turns a cancelled screen into an error state or a retry.
 
 ```kotlin
+// RemoteNearbyPlacesRepository from examples/AntiCorruptionAndSmartMapping.kt, with exceptions instead of NearbyPlacesResult
 suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> =
     try {
-        placesClient.searchNearby(location)
+        api.searchNearby(location.latitude, location.longitude, radiusMeters)
+            .places.orEmpty().mapNotNull { it.toDomainOrNull() }
     } catch (e: CancellationException) {
         throw e // let cancellation propagate
     } catch (e: Exception) {
@@ -120,7 +122,7 @@ Prefer catching specific exception types. If you must catch broadly or use `runC
 
 ### Work that must finish after the user leaves
 
-`viewModelScope` is cancelled when the ViewModel is cleared, for example when the user closes the screen, and so is every suspend call made from it. That is right for loading the screen's data, but not for a save in several steps. `FinishRouteUseCase` stops the location tracker and then saves the route, so a cancel between the two leaves a route that is neither tracked nor finished. The [Android guide](https://developer.android.com/topic/architecture/data-layer) sorts operations by how long they must live:
+`viewModelScope` is cancelled when the ViewModel is cleared, for example when the user closes the screen, and so is every suspend call made from it. That is right for loading the screen's data, but not for a save in several steps. `FinishRouteUseCase` in the examples stops the location tracker and then saves the route. In `viewModelScope`, a cancel between the two would leave a route that is neither tracked nor finished. The [Android guide](https://developer.android.com/topic/architecture/data-layer) sorts operations by how long they must live:
 
 | Operation | Must live until | Run it in |
 | :--- | :--- | :--- |
@@ -131,7 +133,7 @@ Prefer catching specific exception types. If you must catch broadly or use `runC
 For app-oriented work, inject the scope into the use case or repository that owns the work, not into the ViewModel, so that every caller gets the guarantee. The ViewModel still calls it from `viewModelScope`.
 
 ```kotlin
-// FinishRouteUseCase from the examples, with the scope added
+// FinishRouteUseCase from the examples
 class FinishRouteUseCase(
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
@@ -154,7 +156,7 @@ class FinishRouteUseCase(
 
 - `SupervisorJob` keeps one failed operation from cancelling the scope for the others.
 - If the work fails after the user has left, nothing awaits it, and `async` ignores the scope's `CoroutineExceptionHandler`, so the error is lost. Log it inside `async` if you need it.
-- In tests, pass the `TestScope` as the application scope, so that the work runs on virtual time.
+- In tests, pass the `TestScope` as the application scope, so that the work runs on virtual time. `finishingCompletesEvenIfTheCallerIsCancelled` in the examples cancels the caller halfway and checks that the route is still saved.
 
 ---
 
@@ -174,15 +176,15 @@ Don't introduce a GoF pattern preemptively. Apply one **only** when a concrete v
 Use when an algorithm varies at runtime or across build or platform targets (location throttling for walking vs. driving, photo deduplication rules).
 
 ```kotlin
-fun interface PlaceSelectionStrategy {
-    suspend fun selectPlace(
+fun interface PlaceMatchingStrategy {
+    suspend fun matchPlace(
         candidates: List<PlaceCandidate>,
         isAlreadySaved: suspend (PlaceId) -> Boolean,
     ): PlaceCandidate?
 }
 
 // Default strategy: the first candidate not yet saved for this route
-val FirstUnsavedPlaceStrategy = PlaceSelectionStrategy { candidates, isAlreadySaved ->
+val FirstUnsavedPlaceMatching = PlaceMatchingStrategy { candidates, isAlreadySaved ->
     candidates.firstOrNull { candidate -> !isAlreadySaved(candidate.placeId) }
 }
 ```
@@ -191,22 +193,23 @@ val FirstUnsavedPlaceStrategy = PlaceSelectionStrategy { candidates, isAlreadySa
 Use for cross-cutting concerns (in-memory caching, logging, telemetry, retries) on a repository or client, without bloating the core class.
 
 ```kotlin
-class CachingPlacesClient(
-    private val delegate: PlacesClient,
+// PlacesRemoteClient is the interface in examples/PragmaticTestingWithFakes.kt.
+class CachingPlacesRemoteClient(
+    private val delegate: PlacesRemoteClient,
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val ttl: Duration = 5.minutes,
-) : PlacesClient by delegate {
+) : PlacesRemoteClient by delegate {
 
     private val lock = Mutex() // guards the map only; never held during network I/O
     private val cache = mutableMapOf<PlaceId, Entry>()
 
     private class Entry(val photoUri: String, val storedAt: TimeMark)
 
-    override suspend fun fetchPhotoUri(placeId: PlaceId): String? {
+    override suspend fun fetchFreshPhotoUri(placeId: PlaceId): String? {
         val cached = lock.withLock { cache[placeId] }
         if (cached != null && cached.storedAt.elapsedNow() < ttl) return cached.photoUri
 
-        val fresh = delegate.fetchPhotoUri(placeId) ?: return null
+        val fresh = delegate.fetchFreshPhotoUri(placeId) ?: return null
         lock.withLock { cache[placeId] = Entry(fresh, timeSource.markNow()) }
         return fresh
     }

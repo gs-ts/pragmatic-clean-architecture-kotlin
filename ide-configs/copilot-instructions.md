@@ -18,7 +18,7 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
-- [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or is shared; no pass-throughs and no use-case interfaces.
+- [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or holds logic its callers would otherwise duplicate; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
 - [ ] UI state reuses domain models; cheap display values are getters or functions, and UI-specific types exist only for a different shape, an expensive derivation, or a module boundary.
@@ -28,4 +28,4 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 - [ ] No `else` branch in a `when` over a sealed type the project owns.
 - [ ] Shared abstractions have no boolean mode flags; no new base class without 3+ proven, flag-free uses.
 - [ ] Flag keys stay in the data layer; exposure-logging reads are functions called at the decision point; parent flags are read once per screen.
-- [ ] Tests use fakes at the lowest I/O boundary, assert on state, and use virtual time (no `Thread.sleep`, no real delays).
+- [ ] Tests use fakes (the lowest I/O boundary, or the repository when it's thin), assert on state, and use virtual time (no `Thread.sleep`, no real delays).

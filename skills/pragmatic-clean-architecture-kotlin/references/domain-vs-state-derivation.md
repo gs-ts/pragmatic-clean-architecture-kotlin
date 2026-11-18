@@ -91,6 +91,7 @@ data class State(val photos: List<PhotoMetadata>, val aiOnly: Boolean) {
 **Fix:** compute it in the pipeline, once per change of *its own* inputs. The filter depends on the route and the filter toggle only. The service status is combined afterwards, so a service toggle reuses the same `PhotoSection` instance:
 
 ```kotlin
+// In ActiveRouteViewModel (examples/RichDomainVsReactiveState.kt), whose scope and dispatcher are injected.
 private val onlyWithAiSummary = MutableStateFlow(false) // UI-local state (hybrid style)
 
 private val photoSection: Flow<PhotoSection> = combine(
@@ -107,7 +108,7 @@ private val photoSection: Flow<PhotoSection> = combine(
 val state: StateFlow<State> = combine(photoSection, isLocationServiceRunning) { section, serviceRunning ->
     State(isLocationServiceRunning = serviceRunning, ongoingRouteId = routeId, photoSection = section)
 }
-    .flowOn(Dispatchers.Default) // the filter runs off the main thread
+    .flowOn(defaultDispatcher) // the filter runs off the main thread
     .stateIn(scope, SharingStarted.WhileSubscribed(5_000), State())
 ```
 

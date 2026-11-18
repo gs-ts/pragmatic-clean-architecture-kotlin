@@ -27,18 +27,23 @@ class ObserveRouteWithPhotosUseCase @Inject constructor(
 ### Keep it when it
 - **orchestrates** 2+ repositories or services;
 - **enforces a domain policy** across steps;
-- is **reused** by several ViewModels; or
+- holds **logic that several ViewModels would otherwise duplicate** (a one-line repository call they share doesn't count); or
 - in KMP, is the **shared home** for logic that native iOS view models would otherwise reimplement in Swift.
 
 ```kotlin
 // Orchestrates a repository and a platform service, enforces a domain rule,
-// and takes time from an injected Clock.
+// and takes time from an injected Clock. Once started, both steps must happen,
+// so they run in an injected application scope (see tactical-ddd-kotlin.md, section 4).
 class FinishRouteUseCase(
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
     private val clock: Clock,
+    private val applicationScope: CoroutineScope,
 ) {
-    suspend operator fun invoke(routeId: RouteId, name: String): FinishRouteResult {
+    suspend operator fun invoke(routeId: RouteId, name: String): FinishRouteResult =
+        applicationScope.async { finish(routeId, name) }.await()
+
+    private suspend fun finish(routeId: RouteId, name: String): FinishRouteResult {
         val route = routeRepository.getRoute(routeId) ?: return FinishRouteResult.NotFound
         if (!route.canBeFinishedWith(name)) return FinishRouteResult.NameRejected
         locationTracker.stop()
