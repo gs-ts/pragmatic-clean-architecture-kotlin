@@ -80,7 +80,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Fakes over mocks; sociable tests.** Use real use cases, mappers, and repositories. Fake the lowest I/O boundary you own (DAO, API client, SDK wrapper) when the repository has logic; fake the repository when it's thin.
 - **Assert on state.** Count calls in a fake only when the count is the behavior (deduplication, caching, exposure logging).
-- **Deterministic time:** `runTest`, `StandardTestDispatcher`, `testScheduler.timeSource` (shares the virtual clock with `delay`), and Turbine with `backgroundScope`.
+- **Deterministic time:** `runTest`, `StandardTestDispatcher`, `testScheduler.timeSource` (shares the virtual clock with `delay`), and Turbine with `backgroundScope`. Create an androidx ViewModel after `Dispatchers.setMain`, in the test, not in a property of the test class: `viewModelScope` keeps the Main dispatcher it found when it was first used.
 - **Macrobenchmarks:** bind a fake data source in a variant-specific DI module. The production binding must not be compiled into that variant, or a compile-time container like Dagger/Hilt reports a duplicate binding.
 - **Legacy code:** mocks are fine as temporary scaffolding around untestable classes; put new logic behind sprout or wrap seams.
 
