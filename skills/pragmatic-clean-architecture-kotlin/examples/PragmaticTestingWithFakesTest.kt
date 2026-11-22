@@ -145,7 +145,12 @@ class PragmaticTestingWithFakesTest {
             upsertRoute(ongoingRoute(id = 1))
             seedPhotos(
                 routeId = 1,
-                rows = listOf(photoRow(1, summary = "Old town"), photoRow(2), photoRow(3, placeId = "")),
+                rows = listOf(
+                    photoRow(1, summary = "Old town"),
+                    photoRow(2),
+                    photoRow(3, placeId = ""),
+                    photoRow(4, summary = " "),
+                ),
             )
         }
         val droppedRowIds = mutableListOf<Long>()
@@ -153,10 +158,11 @@ class PragmaticTestingWithFakesTest {
 
         viewModel.state.test {
             assertEquals(ActiveRouteViewModel.State(RouteId(1)), awaitItem())
-            assertEquals(listOf(1L, 2L), awaitItem().photoSection.photos.map { it.id.value })
+            assertEquals(listOf(1L, 2L, 4L), awaitItem().photoSection.photos.map { it.id.value })
             assertEquals(listOf(3L), droppedRowIds) // the blank-placeId row was reported, not fatal
 
             viewModel.onAction(ActiveRouteViewModel.Action.AiFilterToggled(enabled = true))
+            // The mapper turned photo 4's blank summary into null, so it has no AI summary.
             assertEquals(listOf(1L), awaitItem().photoSection.photos.map { it.id.value })
         }
     }

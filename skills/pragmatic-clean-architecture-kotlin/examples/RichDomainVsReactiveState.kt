@@ -108,15 +108,17 @@ data class PhotoMetadata(
     val generativeSummary: String? = null,
     val neighborhoodSummary: String? = null,
 ) {
+    // The text fields are null when missing, never blank: the boundary mapper
+    // (toDomainOrNull in AntiCorruptionAndSmartMapping.kt) checks that once, so these
+    // getters don't check again.
     val hasAiSummary: Boolean
         get() = aiSummary != null
 
     val primaryDescription: String?
-        get() = aiSummary ?: displayName?.takeIf { it.isNotBlank() }
+        get() = aiSummary ?: displayName
 
-    // One definition of "has a summary", so every getter treats a blank summary as missing.
     private val aiSummary: String?
-        get() = generativeSummary?.takeIf { it.isNotBlank() } ?: neighborhoodSummary?.takeIf { it.isNotBlank() }
+        get() = generativeSummary ?: neighborhoodSummary
 }
 
 data class RouteWithPhotos(
