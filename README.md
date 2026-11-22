@@ -10,7 +10,7 @@ This skill helps AI assistants apply **tactical Domain-Driven Design (DDD)** and
 
 ## What the skill teaches
 
-- **Tactical DDD where it pays off:** domain rules on the model (Tell, Don't Ask), value objects for IDs, keys, and values whose format, range or unit code relies on (display text stays a `String`), `sealed` types that make impossible states unrepresentable, immutable entity snapshots, and names in the product's language.
+- **Tactical DDD where it pays off:** domain rules on the model (Tell, Don't Ask), value objects for IDs, keys, and values whose format, range or unit code relies on (display text stays a `String`), `sealed` types that make impossible states unrepresentable, immutable entity snapshots, one port with a sealed state for work the platform runs (such as a foreground service), and names in the product's language.
 - **Project conventions first:** an existing codebase's conventions and explicit project instructions override the skill's defaults. In reviews, the skill suggests improvements instead of flagging deliberate conventions as defects. It also departs from a rule that does not pay off or that the project cannot use, and it never adds or upgrades a dependency only to follow one.
 - **Derived values in the right place:** domain model, Flow pipeline, ViewModel state, or composable, chosen by inputs and cost.
 - **Mapping at real boundaries:** mandatory for APIs and SDKs you don't control, with mappers that parse instead of throwing. UI state reuses domain models, with display values derived by getters.
@@ -55,7 +55,7 @@ pragmatic-clean-architecture-kotlin/
 │       │   ├── aha-and-poodr-kotlin.md           # Wrong abstractions, base classes, sealed vs. polymorphism
 │       │   ├── smart-mapping-and-acl.md          # Boundary mapping and when a UI-specific type earns its place
 │       │   ├── feature-flags-and-ab-testing.md   # Experiment contracts and exposure-safe reads
-│       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, errors, coroutine scopes, DI, GoF patterns
+│       │   ├── tactical-ddd-kotlin.md            # Value objects, entities, ports, errors, coroutine scopes, DI, GoF patterns
 │       │   ├── use-cases-and-testing.md          # Use-case litmus test, fakes, virtual time, Macrobenchmark
 │       │   └── kmp.md                            # Kotlin Multiplatform and the Swift boundary
 │       └── examples/

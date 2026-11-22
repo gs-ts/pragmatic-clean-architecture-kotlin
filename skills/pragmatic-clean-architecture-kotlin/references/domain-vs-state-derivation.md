@@ -53,7 +53,7 @@ If the UI must update as time passes, drive it from a ticker built on an injecte
 
 A domain model is a snapshot. It knows nothing about:
 - ephemeral UI state (filter chips, search text, open dialogs, selected IDs);
-- other streams (whether a foreground location service is running, live GPS, connectivity, a ticking timer).
+- other streams (which route the location tracker is tracking, if any; live GPS; connectivity; a ticking timer).
 
 Values that must recalculate when those change are computed in the ViewModel.
 
@@ -61,13 +61,13 @@ Values that must recalculate when those change are computed in the ViewModel.
 
 ```kotlin
 data class State(
-    private val isLocationServiceRunning: Boolean = false,
-    val ongoingRouteId: RouteId? = null,
+    val routeId: RouteId, // the screen's route
+    private val tracking: TrackingState = TrackingState.Idle, // from the LocationTracker port
     val photoSection: PhotoSection = PhotoSection(),
 ) {
-    // Depends on service status + route: it can't live on Route or PhotoMetadata.
+    // Depends on the tracker's state + this screen's route: it can't live on Route or PhotoMetadata.
     val isTracking: Boolean
-        get() = isLocationServiceRunning && ongoingRouteId != null
+        get() = tracking is TrackingState.Tracking && tracking.routeId == routeId
 
     // Uses the unfiltered photos (Pattern B): a filter that hides every photo isn't "loading".
     val isStreamLoading: Boolean
@@ -88,7 +88,7 @@ data class State(val photos: List<PhotoMetadata>, val aiOnly: Boolean) {
 }
 ```
 
-**Fix:** compute it in the pipeline, once per change of *its own* inputs. The filter depends on the route and the filter toggle only. The service status is combined afterwards, so a service toggle reuses the same `PhotoSection` instance:
+**Fix:** compute it in the pipeline, once per change of *its own* inputs. The filter depends on the route and the filter toggle only. The tracker's state is combined afterwards, so a tracking change reuses the same `PhotoSection` instance:
 
 ```kotlin
 // In ActiveRouteViewModel (examples/RichDomainVsReactiveState.kt), whose scope and dispatcher are injected.
@@ -105,14 +105,14 @@ private val photoSection: Flow<PhotoSection> = combine(
     )
 }
 
-val state: StateFlow<State> = combine(photoSection, isLocationServiceRunning) { section, serviceRunning ->
-    State(isLocationServiceRunning = serviceRunning, ongoingRouteId = routeId, photoSection = section)
+val state: StateFlow<State> = combine(photoSection, locationTracker.state) { section, tracking ->
+    State(routeId = routeId, tracking = tracking, photoSection = section)
 }
     .flowOn(defaultDispatcher) // the filter runs off the main thread
-    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), State())
+    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), State(routeId))
 ```
 
-If the filter shared one `combine` with the service status, every service toggle would re-run it and emit a new list. With a plain `List`, that defeats skipping by identity; with `ImmutableList`, it costs an O(N) `equals()` per recomposition.
+If the filter shared one `combine` with the tracker's state, every tracking change would re-run it and emit a new list. With a plain `List`, that defeats skipping by identity; with `ImmutableList`, it costs an O(N) `equals()` per recomposition.
 
 ---
 

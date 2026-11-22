@@ -5,8 +5,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -98,7 +96,7 @@ class PragmaticTestingWithFakesTest {
         val result = finishRoute(RouteId(1), name = "  Morning walk ")
 
         assertEquals(FinishRouteResult.Finished, result)
-        assertFalse(tracker.isTracking)
+        assertEquals(TrackingState.Idle, tracker.state.value)
         val saved = dao.getRoute(1)!!
         assertEquals("Morning walk", saved.displayName)
         assertEquals(fixedNow.toEpochMilliseconds(), saved.finishedAtEpochMillis)
@@ -111,7 +109,7 @@ class PragmaticTestingWithFakesTest {
         val finishRoute = FinishRouteUseCase(LocalRouteRepository(dao), tracker, fixedClock, applicationScope = this)
 
         assertEquals(FinishRouteResult.NameRejected, finishRoute(RouteId(1), name = "ab"))
-        assertTrue(tracker.isTracking)
+        assertEquals(TrackingState.Tracking(RouteId(1)), tracker.state.value)
         assertNull(dao.getRoute(1)!!.finishedAtEpochMillis)
     }
 
@@ -126,17 +124,17 @@ class PragmaticTestingWithFakesTest {
         caller.cancel() // the user leaves the screen
         advanceUntilIdle()
 
-        assertFalse(tracker.isTracking)
+        assertEquals(TrackingState.Idle, tracker.state.value)
         assertEquals(fixedNow.toEpochMilliseconds(), dao.getRoute(1)!!.finishedAtEpochMillis)
     }
 
     private fun TestScope.activeRouteViewModel(
         routeRepository: RouteRepository,
-        isLocationServiceRunning: Flow<Boolean> = MutableStateFlow(true),
+        locationTracker: LocationTracker = FakeLocationTracker(), // tracks route 1, the screen's route
     ) = ActiveRouteViewModel(
         routeId = RouteId(1),
         routeRepository = routeRepository,
-        isLocationServiceRunning = isLocationServiceRunning,
+        locationTracker = locationTracker,
         scope = backgroundScope,
         defaultDispatcher = StandardTestDispatcher(testScheduler),
     )
@@ -154,7 +152,7 @@ class PragmaticTestingWithFakesTest {
         val viewModel = activeRouteViewModel(LocalRouteRepository(dao, onInvalidRow = { droppedRowIds += it.id }))
 
         viewModel.state.test {
-            assertEquals(ActiveRouteViewModel.State(), awaitItem())
+            assertEquals(ActiveRouteViewModel.State(RouteId(1)), awaitItem())
             assertEquals(listOf(1L, 2L), awaitItem().photoSection.photos.map { it.id.value })
             assertEquals(listOf(3L), droppedRowIds) // the blank-placeId row was reported, not fatal
 
@@ -164,23 +162,36 @@ class PragmaticTestingWithFakesTest {
     }
 
     @Test
-    fun aServiceToggleKeepsThePhotoSectionInstance() = runTest {
+    fun stoppingTheTrackerKeepsThePhotoSectionInstance() = runTest {
         val dao = FakeRouteDao().apply {
             upsertRoute(ongoingRoute(id = 1))
             seedPhotos(routeId = 1, rows = listOf(photoRow(1, summary = "Old town")))
         }
-        val serviceRunning = MutableStateFlow(true)
-        val viewModel = activeRouteViewModel(LocalRouteRepository(dao), isLocationServiceRunning = serviceRunning)
+        val tracker = FakeLocationTracker()
+        val viewModel = activeRouteViewModel(LocalRouteRepository(dao), tracker)
 
         viewModel.state.test {
-            skipItems(1) // initial State()
+            skipItems(1) // the initial state
             val tracking = awaitItem()
             assertTrue(tracking.isTracking)
 
-            serviceRunning.value = false
+            tracker.stop()
             val stopped = awaitItem()
             assertFalse(stopped.isTracking)
             assertSame(tracking.photoSection, stopped.photoSection) // same instance: Compose skips by identity
+        }
+    }
+
+    @Test
+    fun trackingAnotherRouteIsNotTrackingThisOne() = runTest {
+        val dao = FakeRouteDao().apply { upsertRoute(ongoingRoute(id = 1)) }
+        val tracker = FakeLocationTracker(TrackingState.Tracking(RouteId(2)))
+        val viewModel = activeRouteViewModel(LocalRouteRepository(dao), tracker)
+
+        viewModel.state.test {
+            skipItems(1) // the initial state
+            // A "service is running" flag would say true here: the tracker runs, but for route 2.
+            assertFalse(awaitItem().isTracking)
         }
     }
 
@@ -193,7 +204,7 @@ class PragmaticTestingWithFakesTest {
         val viewModel = activeRouteViewModel(LocalRouteRepository(dao))
 
         viewModel.state.test {
-            skipItems(1) // initial State()
+            skipItems(1) // the initial state
             assertFalse(awaitItem().isStreamLoading)
 
             viewModel.onAction(ActiveRouteViewModel.Action.AiFilterToggled(enabled = true))

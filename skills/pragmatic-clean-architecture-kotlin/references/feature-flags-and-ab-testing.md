@@ -104,7 +104,7 @@ Don't force the Strategy pattern onto every flag, and don't litter complex domai
 
 ### Use the Strategy pattern when
 - A flag replaces a **multi-step workflow, calculation engine, or repository pipeline** (for example, a new place-matching algorithm).
-- Inject `PlaceMatchingStrategy` (a `fun interface`, as in `tactical-ddd-kotlin.md`, section 6) into the use case or ViewModel, and let DI (Hilt, Koin, Metro) provide `PlaceMatchingV2` or `LegacyPlaceMatching` based on `experiments.usesPlaceMatchingV2()`. When the experiment ends, delete the losing class and the DI branch; the consumer doesn't change.
+- Inject `PlaceMatchingStrategy` (a `fun interface`, as in `tactical-ddd-kotlin.md`, section 7) into the use case or ViewModel, and let DI (Hilt, Koin, Metro) provide `PlaceMatchingV2` or `LegacyPlaceMatching` based on `experiments.usesPlaceMatchingV2()`. When the experiment ends, delete the losing class and the DI branch; the consumer doesn't change.
 - **Mind when the provider runs.** If DI evaluates the flag when it builds the graph (at app start, say), the exposure is logged before the user reaches the workflow. Resolve the strategy when the workflow starts: a factory, or a provider scoped to that screen.
 
 ---

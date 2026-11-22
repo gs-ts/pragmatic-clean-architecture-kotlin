@@ -81,7 +81,29 @@ DDD defines entities by identity. On a reactive client, model them as **immutabl
 - A change produces a new instance (`route.finish(name, at = now)` returns a copy).
 - If only a factory may build an entity, make its constructor internal and add `@ConsistentCopyVisibility` (see section 1).
 
-## 3. What usually doesn't pay off on clients
+## 3. Work the platform runs, behind a port
+
+Some work runs outside any screen, under the platform's control: a foreground service that tracks location, a BLE connection, media playback. Screens and use cases need its state, and the platform decides whether it may start. Give the domain one port for it, in product language: a `sealed` state and the commands. The platform component (the `Service`) is the adapter behind that port.
+
+```kotlin
+// From examples/RichDomainVsReactiveState.kt
+sealed interface TrackingState {
+    data object Idle : TrackingState
+    data class Tracking(val routeId: RouteId) : TrackingState
+}
+
+interface LocationTracker {
+    val state: StateFlow<TrackingState>
+    fun start(routeId: RouteId)
+    suspend fun stop()
+}
+```
+
+- **One sealed state, with one owner.** A "service is running" flag plus a nullable route ID can say "tracking, but no route", and a screen can't tell whether the tracked route is its own: `ActiveRouteViewModel.State.isTracking` compares the IDs. Screens read the port's state instead of keeping their own copy of "the ongoing route", which drifts.
+- **Report what the platform confirmed.** Starting a foreground service can fail. An app that targets Android 12 or higher gets a `ForegroundServiceStartNotAllowedException` when it starts one from the background ([docs](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)), and one that targets Android 14 or higher gets a `SecurityException` when a permission for the service type is missing ([docs](https://developer.android.com/develop/background-work/services/fgs/launch)). So `state` becomes `Tracking` once the service runs in the foreground, not when `start()` is called, and `Idle` whenever the service stops, whatever the reason.
+- **The component hosts the work; a use case holds the rules.** What happens at each location (search nearby places, skip the ones already saved) goes in a use case that the service runs, so a JVM test reaches it without Android. The service keeps the platform parts: its lifecycle, the notification, and stopping when the work fails.
+
+## 4. What usually doesn't pay off on clients
 
 - **Aggregates with transactional consistency boundaries:** the backend owns cross-entity invariants; the client renders and edits snapshots.
 - **Domain events and event buses:** reactive streams (`Flow`) already propagate change.
@@ -91,7 +113,7 @@ Reach for them only when the client really owns the invariant (for example, offl
 
 ---
 
-## 4. Domain errors, technical exceptions, and cancellation
+## 5. Domain errors, technical exceptions, and cancellation
 
 Don't let raw `SQLException`, `HttpException`, or SDK `ApiException` escape the data layer. Map them at the repository boundary to domain exceptions or a `sealed interface` result hierarchy.
 
@@ -160,7 +182,7 @@ class FinishRouteUseCase(
 
 ---
 
-## 5. Reflection and dependency injection
+## 6. Reflection and dependency injection
 
 - **Reflection:** don't write reflection-based mappers, factories, or service locators. Codegen libraries (Moshi codegen, kotlinx.serialization, Room) and libraries that ship consumer R8 rules (Retrofit) are fine. In KMP, full reflection (`kotlin-reflect`) isn't available on Kotlin/Native or JS, so shared code can't rely on it at all.
 - **DI:** use any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, or Koin, which resolves at runtime without reflection) or wire by hand. Hilt is Android-only, so shared KMP code needs one of the others.
@@ -168,7 +190,7 @@ class FinishRouteUseCase(
 
 ---
 
-## 6. Gang of Four patterns in idiomatic Kotlin
+## 7. Gang of Four patterns in idiomatic Kotlin
 
 Don't introduce a GoF pattern preemptively. Apply one **only** when a concrete variation or structural problem exists.
 

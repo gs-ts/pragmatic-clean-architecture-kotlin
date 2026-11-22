@@ -33,7 +33,7 @@ class ObserveRouteWithPhotosUseCase @Inject constructor(
 ```kotlin
 // Orchestrates a repository and a platform service, enforces a domain rule,
 // and takes time from an injected Clock. Once started, both steps must happen,
-// so they run in an injected application scope (see tactical-ddd-kotlin.md, section 4).
+// so they run in an injected application scope (see tactical-ddd-kotlin.md, section 5).
 class FinishRouteUseCase(
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,

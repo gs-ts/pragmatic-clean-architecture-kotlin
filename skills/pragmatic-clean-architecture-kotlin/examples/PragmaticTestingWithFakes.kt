@@ -6,6 +6,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
@@ -84,11 +86,8 @@ interface PhotoUriDao {
 //    and takes time from an injected Clock. A one-line repository call wouldn't qualify.
 //    Once started, both steps must happen, so they run in an injected application
 //    scope: leaving the screen cancels the caller's await(), not the work.
+//    LocationTracker is the domain port in examples/RichDomainVsReactiveState.kt.
 // ============================================================================
-
-interface LocationTracker {
-    suspend fun stop()
-}
 
 sealed interface FinishRouteResult {
     data object Finished : FinishRouteResult
@@ -143,14 +142,19 @@ class FakeRouteDao : RouteDao {
 }
 
 class FakeLocationTracker(
+    tracking: TrackingState = TrackingState.Tracking(RouteId(1)),
     private val stopLatency: Duration = Duration.ZERO,
 ) : LocationTracker {
-    var isTracking: Boolean = true
-        private set
+    private val _state = MutableStateFlow(tracking)
+    override val state: StateFlow<TrackingState> = _state.asStateFlow()
+
+    override fun start(routeId: RouteId) {
+        _state.value = TrackingState.Tracking(routeId) // this fake's platform never refuses
+    }
 
     override suspend fun stop() {
         delay(stopLatency) // virtual time under runTest
-        isTracking = false
+        _state.value = TrackingState.Idle
     }
 }
 

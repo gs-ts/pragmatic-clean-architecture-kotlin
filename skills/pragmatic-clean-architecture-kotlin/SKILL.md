@@ -23,7 +23,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 | :--- | :--- | :--- |
 | Only the model's own fields, cheaply (`isOngoing`, `hasAiSummary`) | **Domain model** getter | Each Flow emission is a new immutable instance, so the value is always current. |
 | Only the model's own fields, expensively (loops, sorting, distance over thousands of points) | **Once per emission:** repository mapper, Flow `map` on `Dispatchers.Default`, or a `val` initialized in the constructor of a repository-emitted model | A getter re-runs on every read, on the main thread during composition. If it returns a list, each read is a new instance, so children that receive it can't skip. Don't put constructor-computed values on `State`: every `copy()` recomputes them. |
-| The model plus UI state or another stream (filter, selection, service status, location) | **ViewModel:** `combine()` for O(N) work, `State` getters for O(1) flags | Domain models don't know about UI state or other streams. Derive each list only from the inputs it depends on, so unrelated changes reuse the same instance. |
+| The model plus UI state or another stream (filter, selection, tracking state, location) | **ViewModel:** `combine()` for O(N) work, `State` getters for O(1) flags | Domain models don't know about UI state or other streams. Derive each list only from the inputs it depends on, so unrelated changes reuse the same instance. |
 | The current time | A **`now: Instant` parameter** (`isAbandonedAt(now)`); ticking UI from an injected `Clock` | Keeps domain code pure and testable. |
 | Locale, string resources, `Context` | **Composable**, or keep `StringResource`/`UiText` in state | ViewModels survive locale changes, so strings formatted there go stale. Also keeps shared code platform-free. |
 
@@ -96,6 +96,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Value objects:** `@JvmInline value class` for IDs and keys, and for values whose format, range or unit other code relies on (a hash, a latitude, an amount). Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". Display text, such as a route name or a note, stays a `String` even when its input has limits (trimmed, not blank, a maximum length): keep the limits in one function, or in a rule on the model. A value that code only passes along stays a primitive too, such as a photo URL for the image loader, or `distanceMeters` while the app uses one unit. When a value object needs normalizing (trimmed, lowercased, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility` (from Kotlin 2.0.20), or the public `copy()` skips the factory.
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
+- **Work the platform runs outside any screen** (a foreground service, a BLE connection, playback) gets one domain port in product language: a `sealed` state (`TrackingState.Idle`, `Tracking(routeId)`) that screens read instead of keeping their own copy, and its commands. The platform component is the adapter. Its state changes only when the platform confirms the change, because starting a foreground service can fail, and the rules for the work live in a use case that the component runs.
 - **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
 - **DI:** any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, Koin) or manual wiring. Hilt is Android-only. Dagger and Hilt cannot take a value class as an assisted-injection parameter, so take the underlying value and wrap it inside.
@@ -129,6 +130,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 2. Walk the checklist below, and look for domain-modeling opportunities in particular:
    - primitives that should be value objects (IDs, amounts, coordinates), but not display text such as names and titles, or values that code only passes along;
    - rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask);
+   - domain rules inside an Android component (a `Service`, a `Worker`), which belong in a use case that the component runs;
    - boolean or nullable combinations that a `sealed` type would make impossible;
    - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
    - invariants checked in several places instead of once, at construction or at the boundary.
@@ -163,7 +165,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask, and `sealed` vs. polymorphism.
 - `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI-specific type earns its place.
 - `references/feature-flags-and-ab-testing.md`: experiment contracts, exposure-safe reads, and inline branches vs. Strategy.
-- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.
+- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, ports for work the platform runs, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
-- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.
+- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state with a tracking port, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.
