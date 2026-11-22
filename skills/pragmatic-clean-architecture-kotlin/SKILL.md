@@ -23,7 +23,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 | :--- | :--- | :--- |
 | Only the model's own fields, cheaply (`isOngoing`, `hasAiSummary`) | **Domain model** getter | Each Flow emission is a new immutable instance, so the value is always current. |
 | Only the model's own fields, expensively (loops, sorting, distance over thousands of points) | **Once per emission:** repository mapper, Flow `map` on `Dispatchers.Default`, or a `val` initialized in the constructor of a repository-emitted model | A getter re-runs on every read, on the main thread during composition. If it returns a list, each read is a new instance, so children that receive it can't skip. Don't put constructor-computed values on `State`: every `copy()` recomputes them. |
-| The model plus UI state or another stream (filter, selection, service status, location) | **ViewModel:** `combine()` for O(N) work, `State` getters for O(1) flags | Domain models don't know about UI state or other streams. Derive each list only from the inputs it depends on, so unrelated changes reuse the same instance. |
+| The model plus UI state or another stream (filter, selection, tracking state, location) | **ViewModel:** `combine()` for O(N) work, `State` getters for O(1) flags | Domain models don't know about UI state or other streams. Derive each list only from the inputs it depends on, so unrelated changes reuse the same instance. |
 | The current time | A **`now: Instant` parameter** (`isAbandonedAt(now)`); ticking UI from an injected `Clock` | Keeps domain code pure and testable. |
 | Locale, string resources, `Context` | **Composable**, or keep `StringResource`/`UiText` in state | ViewModels survive locale changes, so strings formatted there go stale. Also keeps shared code platform-free. |
 
@@ -32,6 +32,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 ## 2. ViewModel state and Compose
 
 - **One state style per ViewModel.** Derived: `combine(...).stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)` when state comes from flows. Event-driven: `MutableStateFlow` + `update { it.copy(...) }` when it comes from user actions. Hybrid: UI-local state in a private `MutableStateFlow`, combined with the data flows. Never write into derived state.
+- **Keep a key with the data loaded for it.** When `combine` reads UI-local state (a selected route ID) and data loaded for it (`selectedRouteId.flatMapLatest { ... }`), the new key arrives first and is paired with the previous key's data. Carry the key in the data and use the data only while the keys match.
 - **User input goes through `onAction(action: Action)`** with a `sealed interface Action`. Model navigation and other outcomes as state the UI consumes, unless the project already has an event pattern.
 - **Text fields edit a `TextFieldState`** when the project has it: Compose Foundation 1.7, and Material 3 1.4 for the Material fields. On older versions, keep the value-based field and send each change as an `Action`. Use `rememberTextFieldState()` in the composable, which also restores the text after process death. When the ViewModel's logic reads the text (validation, submit), hold the `TextFieldState` in the ViewModel instead, as the Compose docs encourage: the field edits it directly, so typing needs no `Action`, but the text survives process death only if you save it in `SavedStateHandle`. Keep the screen state a `StateFlow` and derive values from the text with `snapshotFlow`. A form that recomputes values on every keystroke may keep all its state in Compose state instead (`mutableStateOf`, `derivedStateOf`), as a stated deviation from the Android guide.
 - **A one-off action changes state before its first suspension point** (`isFinishing = true`), so that a second tap sees the change and does nothing.
@@ -66,8 +67,10 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 6. Errors and coroutines
 
-- Map technical failures (`HttpException`, `SQLException`, SDK exceptions) to domain errors at the repository boundary.
+- Map technical failures (`HttpException`, `SQLException`, SDK exceptions) to domain errors at the repository boundary. Put only the call you don't control inside the `try`, so a bug in your own mapping isn't reported as an API failure, and match failures by type or status code, never by message text. A failure is never an empty result.
+- **No catch-all to keep going.** Use cases and long-running work (a service that handles each location) don't wrap their steps in `catch (e: Exception)`. Expected failures arrive as domain errors; anything else is a bug that should end the work, so its owner stops and reports it.
 - **Never swallow cancellation.** When catching `Exception`/`Throwable` or using `runCatching` around suspend calls, rethrow `CancellationException`. Prefer catching specific exception types.
+- **`stateIn` and `shareIn` don't pass failures on.** A port's stream that can't go on ends with a domain exception, but collectors of `stateIn` or `shareIn` never see an upstream exception: it ends the sharing and goes to the scope, which in `viewModelScope` crashes the app. Turn the failures you expect into state before sharing (`catch { emit(...) }`).
 - **Pick the scope by how long the work must live.** Work for the screen runs in `viewModelScope` and stops when the ViewModel is cleared. Work that must finish once it has started, such as a save in several steps, runs in an injected application scope with `scope.async { ... }.await()`. Inject that scope into the use case or repository that owns the work, so that every caller gets the guarantee. Work that must survive process death goes to WorkManager on Android.
 - Inject dispatchers, `Clock`, `TimeSource`, and ID generators. Don't call `Clock.System.now()` or `System.currentTimeMillis()`, or create random IDs, in repositories, use cases, or domain code.
 
@@ -77,7 +80,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Fakes over mocks; sociable tests.** Use real use cases, mappers, and repositories. Fake the lowest I/O boundary you own (DAO, API client, SDK wrapper) when the repository has logic; fake the repository when it's thin.
 - **Assert on state.** Count calls in a fake only when the count is the behavior (deduplication, caching, exposure logging).
-- **Deterministic time:** `runTest`, `StandardTestDispatcher`, `testScheduler.timeSource` (shares the virtual clock with `delay`), and Turbine with `backgroundScope`.
+- **Deterministic time:** `runTest`, `StandardTestDispatcher`, `testScheduler.timeSource` (shares the virtual clock with `delay`), and Turbine with `backgroundScope`. Create an androidx ViewModel after `Dispatchers.setMain`, in the test, not in a property of the test class: `viewModelScope` keeps the Main dispatcher it found when it was first used.
 - **Macrobenchmarks:** bind a fake data source in a variant-specific DI module. The production binding must not be compiled into that variant, or a compile-time container like Dagger/Hilt reports a duplicate binding.
 - **Legacy code:** mocks are fine as temporary scaffolding around untestable classes; put new logic behind sprout or wrap seams.
 
@@ -96,7 +99,8 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Value objects:** `@JvmInline value class` for IDs and keys, and for values whose format, range or unit other code relies on (a hash, a latitude, an amount). Validate real invariants (non-blank `PlaceId`, coordinate ranges), not storage details like "ID > 0". Display text, such as a route name or a note, stays a `String` even when its input has limits (trimmed, not blank, a maximum length): keep the limits in one function, or in a rule on the model. A value that code only passes along stays a primitive too, such as a photo URL for the image loader, or `distanceMeters` while the app uses one unit. When a value object needs normalizing (trimmed, lowercased, sorted), make the constructor private and build instances only through a factory, such as `parse`; on a data class, also add `@ConsistentCopyVisibility` (from Kotlin 2.0.20), or the public `copy()` skips the factory.
 - **Entities are immutable `data class` snapshots.** Structural equality is deliberate, because StateFlow and Compose rely on it. Use the `id` for identity (lazy-list keys, diffing).
-- **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers.
+- **Work the platform runs outside any screen** (a foreground service, a BLE connection, playback) gets one domain port in product language: a `sealed` state (`TrackingState.Idle`, `Tracking(routeId)`) that screens read instead of keeping their own copy, and its commands. The platform component is the adapter. Its state changes only when the platform confirms the change, because starting a foreground service can fail, and the rules for the work live in a use case that the component runs.
+- **Usually skip on clients:** aggregates with transactional boundaries, domain events, and domain-service layers. When the client owns an invariant that two callers can race on (two screens finish the same route), enforce it with one conditional write (`UPDATE ... WHERE finished_at IS NULL`), not a read, a check, and a save.
 - **Reflection:** don't write reflection-based mappers or factories. Codegen libraries and libraries that ship R8 rules (Retrofit, Moshi codegen, kotlinx.serialization) are fine.
 - **DI:** any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, Koin) or manual wiring. Hilt is Android-only. Dagger and Hilt cannot take a value class as an assisted-injection parameter, so take the underlying value and wrap it inside.
 - **GoF patterns only for a concrete problem:** Strategy as `fun interface`, Decorator via `by` delegation, Factory as companion functions or assisted injection.
@@ -129,10 +133,11 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 2. Walk the checklist below, and look for domain-modeling opportunities in particular:
    - primitives that should be value objects (IDs, amounts, coordinates), but not display text such as names and titles, or values that code only passes along;
    - rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask);
+   - domain rules inside an Android component (a `Service`, a `Worker`), which belong in a use case that the component runs;
    - boolean or nullable combinations that a `sealed` type would make impossible;
    - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
    - invariants checked in several places instead of once, at construction or at the boundary.
-3. Report suggestions, most important first: correctness risks (swallowed cancellation, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
+3. Report suggestions, most important first: correctness risks (swallowed cancellation, catch-alls that hide bugs, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
 4. For each suggestion, give the location, why it helps, a short before/after, and its cost or trade-off. Mark optional suggestions as optional, and say so when the current code is fine as it is.
 5. Don't apply changes unless asked.
 
@@ -144,6 +149,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
+- [ ] Each `try` wraps only the call that can fail and catches only what you expect; failures don't become empty results, and use cases don't catch everything to keep going.
 - [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or holds logic its callers would otherwise duplicate; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
@@ -163,7 +169,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask, and `sealed` vs. polymorphism.
 - `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI-specific type earns its place.
 - `references/feature-flags-and-ab-testing.md`: experiment contracts, exposure-safe reads, and inline branches vs. Strategy.
-- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.
+- `references/tactical-ddd-kotlin.md`: value objects, entities on clients, ports for work the platform runs, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.
 - `references/use-cases-and-testing.md`: the use-case litmus test, sociable tests, fakes, virtual time, Macrobenchmark wiring, and legacy seams.
 - `references/kmp.md`: source sets, DI, where logic lives with native iOS UIs, and the Swift boundary.
-- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.
+- `examples/*.kt`: one running domain (a route tracker with place photos): domain and reactive state with a tracking port, boundary mapping for a database and a remote API (with error translation), feature flags, and fakes with a test suite. They compile with Kotlin 2.3+ and kotlinx-coroutines; the test file also needs kotlin-test, kotlinx-coroutines-test, and Turbine.

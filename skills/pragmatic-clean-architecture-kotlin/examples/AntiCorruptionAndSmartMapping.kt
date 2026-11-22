@@ -176,21 +176,25 @@ class RemoteNearbyPlacesRepository(
     private val radiusMeters: Double = 50.0,
 ) : NearbyPlacesRepository {
 
-    override suspend fun nearbyPlaces(location: Coordinates): NearbyPlacesResult =
-        try {
-            val response = api.searchNearby(location.latitude, location.longitude, radiusMeters)
-            NearbyPlacesResult.Found(response.places.orEmpty().mapNotNull { it.toDomainOrNull() })
+    override suspend fun nearbyPlaces(location: Coordinates): NearbyPlacesResult {
+        // Only the call you don't control is inside the try. A bug in the mapping below
+        // then fails loudly instead of being reported as an unavailable API.
+        val response = try {
+            api.searchNearby(location.latitude, location.longitude, radiusMeters)
         } catch (e: CancellationException) {
             throw e // first, before the broad catch below: cancellation must never become an error state
         } catch (e: NoConnectivityException) {
-            NearbyPlacesResult.Offline
+            return NearbyPlacesResult.Offline
         } catch (e: HttpStatusException) {
-            if (e.statusCode == HTTP_TOO_MANY_REQUESTS) NearbyPlacesResult.QuotaExceeded else NearbyPlacesResult.Unavailable(e)
+            // By status code, never by message text.
+            return if (e.statusCode == HTTP_TOO_MANY_REQUESTS) NearbyPlacesResult.QuotaExceeded else NearbyPlacesResult.Unavailable(e)
         } catch (e: Exception) {
             // An SDK you don't control can throw types you didn't list. Without this catch, one would
             // escape to the caller's coroutine scope, and in a scope without a handler, crash the app.
-            NearbyPlacesResult.Unavailable(e)
+            return NearbyPlacesResult.Unavailable(e)
         }
+        return NearbyPlacesResult.Found(response.places.orEmpty().mapNotNull { it.toDomainOrNull() })
+    }
 
     private companion object {
         const val HTTP_TOO_MANY_REQUESTS = 429

@@ -53,7 +53,7 @@ If the UI must update as time passes, drive it from a ticker built on an injecte
 
 A domain model is a snapshot. It knows nothing about:
 - ephemeral UI state (filter chips, search text, open dialogs, selected IDs);
-- other streams (whether a foreground location service is running, live GPS, connectivity, a ticking timer).
+- other streams (which route the location tracker is tracking, if any; live GPS; connectivity; a ticking timer).
 
 Values that must recalculate when those change are computed in the ViewModel.
 
@@ -61,13 +61,13 @@ Values that must recalculate when those change are computed in the ViewModel.
 
 ```kotlin
 data class State(
-    private val isLocationServiceRunning: Boolean = false,
-    val ongoingRouteId: RouteId? = null,
+    val routeId: RouteId, // the screen's route
+    private val tracking: TrackingState = TrackingState.Idle, // from the LocationTracker port
     val photoSection: PhotoSection = PhotoSection(),
 ) {
-    // Depends on service status + route: it can't live on Route or PhotoMetadata.
+    // Depends on the tracker's state + this screen's route: it can't live on Route or PhotoMetadata.
     val isTracking: Boolean
-        get() = isLocationServiceRunning && ongoingRouteId != null
+        get() = tracking is TrackingState.Tracking && tracking.routeId == routeId
 
     // Uses the unfiltered photos (Pattern B): a filter that hides every photo isn't "loading".
     val isStreamLoading: Boolean
@@ -88,7 +88,7 @@ data class State(val photos: List<PhotoMetadata>, val aiOnly: Boolean) {
 }
 ```
 
-**Fix:** compute it in the pipeline, once per change of *its own* inputs. The filter depends on the route and the filter toggle only. The service status is combined afterwards, so a service toggle reuses the same `PhotoSection` instance:
+**Fix:** compute it in the pipeline, once per change of *its own* inputs. The filter depends on the route and the filter toggle only. The tracker's state is combined afterwards, so a tracking change reuses the same `PhotoSection` instance:
 
 ```kotlin
 // In ActiveRouteViewModel (examples/RichDomainVsReactiveState.kt), whose scope and dispatcher are injected.
@@ -105,14 +105,14 @@ private val photoSection: Flow<PhotoSection> = combine(
     )
 }
 
-val state: StateFlow<State> = combine(photoSection, isLocationServiceRunning) { section, serviceRunning ->
-    State(isLocationServiceRunning = serviceRunning, ongoingRouteId = routeId, photoSection = section)
+val state: StateFlow<State> = combine(photoSection, locationTracker.state) { section, tracking ->
+    State(routeId = routeId, tracking = tracking, photoSection = section)
 }
     .flowOn(defaultDispatcher) // the filter runs off the main thread
-    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), State())
+    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), State(routeId))
 ```
 
-If the filter shared one `combine` with the service status, every service toggle would re-run it and emit a new list. With a plain `List`, that defeats skipping by identity; with `ImmutableList`, it costs an O(N) `equals()` per recomposition.
+If the filter shared one `combine` with the tracker's state, every tracking change would re-run it and emit a new list. With a plain `List`, that defeats skipping by identity; with `ImmutableList`, it costs an O(N) `equals()` per recomposition.
 
 ---
 
@@ -149,6 +149,25 @@ Formatting needs `Context`, string resources, or `Locale`. Do it in the composab
 | **Hybrid** | Both | UI-local state (filters, dialogs) in a private `MutableStateFlow`, combined with the data flows into a derived `state` |
 
 Never write into derived state. Don't collect a data flow in `init` just to copy it into a `MutableStateFlow`: `stateIn(WhileSubscribed)` stops the upstream when nobody is collecting, and the copy loses that.
+
+**A key and the data loaded for it.** `combine` pairs the latest value of each flow ([docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/combine.html)). When UI-local state picks what to load, such as a selected route, and the same `combine` also reads that state, the new key arrives first, so `combine` emits it once with the previous key's data. In that state, the screen shows route 2 as selected with route 1's photos, and an action taken then uses route 1's photos. Keep the key with the loaded data (`RouteWithPhotos` has its `route.id`), and use the data only while the keys match:
+
+```kotlin
+// A list-detail screen: the user picks a route in the list, and the detail shows its photos.
+private val selectedRouteId = MutableStateFlow<RouteId?>(null) // UI-local state
+
+@OptIn(ExperimentalCoroutinesApi::class) // flatMapLatest
+private val selected: Flow<RouteWithPhotos?> = selectedRouteId.flatMapLatest { routeId ->
+    if (routeId == null) flowOf(null) else routeRepository.observeRouteWithPhotos(routeId)
+}
+
+val state: StateFlow<State> = combine(routes, selectedRouteId, selected) { routes, selectedId, selected ->
+    // Right after a pick, `selected` still holds the previous route: show none until the IDs match.
+    State(routes = routes, selectedRouteId = selectedId, selected = selected?.takeIf { it.route.id == selectedId })
+}.stateIn(scope, SharingStarted.WhileSubscribed(5_000), State())
+```
+
+Turbine sees the mismatched state, because it records every emission. A test that reads only the last `state.value` doesn't.
 
 ---
 

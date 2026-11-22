@@ -81,7 +81,29 @@ DDD defines entities by identity. On a reactive client, model them as **immutabl
 - A change produces a new instance (`route.finish(name, at = now)` returns a copy).
 - If only a factory may build an entity, make its constructor internal and add `@ConsistentCopyVisibility` (see section 1).
 
-## 3. What usually doesn't pay off on clients
+## 3. Work the platform runs, behind a port
+
+Some work runs outside any screen, under the platform's control: a foreground service that tracks location, a BLE connection, media playback. Screens and use cases need its state, and the platform decides whether it may start. Give the domain one port for it, in product language: a `sealed` state and the commands. The platform component (the `Service`) is the adapter behind that port.
+
+```kotlin
+// From examples/RichDomainVsReactiveState.kt
+sealed interface TrackingState {
+    data object Idle : TrackingState
+    data class Tracking(val routeId: RouteId) : TrackingState
+}
+
+interface LocationTracker {
+    val state: StateFlow<TrackingState>
+    fun start(routeId: RouteId)
+    suspend fun stop()
+}
+```
+
+- **One sealed state, with one owner.** A "service is running" flag plus a nullable route ID can say "tracking, but no route", and a screen can't tell whether the tracked route is its own: `ActiveRouteViewModel.State.isTracking` compares the IDs. Screens read the port's state instead of keeping their own copy of "the ongoing route", which drifts.
+- **Report what the platform confirmed.** Starting a foreground service can fail. An app that targets Android 12 or higher gets a `ForegroundServiceStartNotAllowedException` when it starts one from the background ([docs](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)), and one that targets Android 14 or higher gets a `SecurityException` when a permission for the service type is missing ([docs](https://developer.android.com/develop/background-work/services/fgs/launch)). So `state` becomes `Tracking` once the service runs in the foreground, not when `start()` is called, and `Idle` whenever the service stops, whatever the reason.
+- **The component hosts the work; a use case holds the rules.** What happens at each location (search nearby places, skip the ones already saved) goes in a use case that the service runs, so a JVM test reaches it without Android. The service keeps the platform parts: its lifecycle, the notification, and stopping when the work fails (see section 5).
+
+## 4. What usually doesn't pay off on clients
 
 - **Aggregates with transactional consistency boundaries:** the backend owns cross-entity invariants; the client renders and edits snapshots.
 - **Domain events and event buses:** reactive streams (`Flow`) already propagate change.
@@ -89,9 +111,11 @@ DDD defines entities by identity. On a reactive client, model them as **immutabl
 
 Reach for them only when the client really owns the invariant (for example, offline-first editing with local conflict rules).
 
+When the client does own an invariant that two callers can race on, one conditional write usually enforces it, without an aggregate. `FinishRouteUseCase` (section 5) reads the route, checks it, and saves it, which keeps the example short. If two calls can overlap, such as from two screens, both can read the route as ongoing and both save it. Let one statement decide instead, such as `UPDATE routes SET finished_at = :at WHERE id = :id AND finished_at IS NULL`. A Room `@Query` that runs an `UPDATE` can return the number of rows it changed as an `Int`: 0 means that the other caller won.
+
 ---
 
-## 4. Domain errors, technical exceptions, and cancellation
+## 5. Domain errors, technical exceptions, and cancellation
 
 Don't let raw `SQLException`, `HttpException`, or SDK `ApiException` escape the data layer. Map them at the repository boundary to domain exceptions or a `sealed interface` result hierarchy.
 
@@ -107,18 +131,27 @@ sealed class PhotoMetadataException(message: String, cause: Throwable? = null) :
 
 ```kotlin
 // RemoteNearbyPlacesRepository from examples/AntiCorruptionAndSmartMapping.kt, with exceptions instead of NearbyPlacesResult
-suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> =
-    try {
+suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> {
+    val response = try {
         api.searchNearby(location.latitude, location.longitude, radiusMeters)
-            .places.orEmpty().mapNotNull { it.toDomainOrNull() }
     } catch (e: CancellationException) {
         throw e // let cancellation propagate
     } catch (e: Exception) {
         throw PhotoMetadataException.PlacesUnavailable(e)
     }
+    return response.places.orEmpty().mapNotNull { it.toDomainOrNull() } // your own code: outside the try
+}
 ```
 
 Prefer catching specific exception types. If you must catch broadly or use `runCatching`, rethrow `CancellationException` first.
+
+**Catch only what you expect, where it happens.** A broad catch hides bugs along with the failures it was written for.
+- Put only the call you don't control inside the `try`, as above. A bug in your own mapping then fails loudly instead of looking like an unavailable API. Catch broadly only around such a call, for an SDK that throws types it doesn't document.
+- Match failures by type or status code (`statusCode == 429`), never by message text.
+- Report a failure as a failure: `catch (e: IOException) { emptyList() }` tells the user that nothing is nearby when the device is offline.
+- Don't wrap the steps of a use case or a long-running loop in `catch (e: Exception)` to keep going. Expected failures already arrive as domain errors. Anything else is a bug that should end the work, so that its owner (a ViewModel, a service) stops and reports it, instead of failing quietly at every location.
+
+**Streams fail the same way.** A `Flow` from a port ends with a domain exception when it can't go on, such as a `LocationUnavailableException` when location updates can't start, and the collector handles it with `catch` or a `try` around `collect`. A failure the stream goes on after, such as one search that couldn't reach the server, is a value of the emitted type. Collectors of `stateIn` or `shareIn` never see an upstream failure: it "terminates the sharing coroutine without affecting any of the subscribers" and goes to the scope ([`shareIn` docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/share-in.html)), which in `viewModelScope` crashes the app. Turn the failures you expect into state before sharing.
 
 ### Work that must finish after the user leaves
 
@@ -160,7 +193,7 @@ class FinishRouteUseCase(
 
 ---
 
-## 5. Reflection and dependency injection
+## 6. Reflection and dependency injection
 
 - **Reflection:** don't write reflection-based mappers, factories, or service locators. Codegen libraries (Moshi codegen, kotlinx.serialization, Room) and libraries that ship consumer R8 rules (Retrofit) are fine. In KMP, full reflection (`kotlin-reflect`) isn't available on Kotlin/Native or JS, so shared code can't rely on it at all.
 - **DI:** use any reflection-free container (Hilt/Dagger, Metro, kotlin-inject, or Koin, which resolves at runtime without reflection) or wire by hand. Hilt is Android-only, so shared KMP code needs one of the others.
@@ -168,7 +201,7 @@ class FinishRouteUseCase(
 
 ---
 
-## 6. Gang of Four patterns in idiomatic Kotlin
+## 7. Gang of Four patterns in idiomatic Kotlin
 
 Don't introduce a GoF pattern preemptively. Apply one **only** when a concrete variation or structural problem exists.
 

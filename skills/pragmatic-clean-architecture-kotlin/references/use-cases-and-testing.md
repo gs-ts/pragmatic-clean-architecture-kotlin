@@ -33,7 +33,7 @@ class ObserveRouteWithPhotosUseCase @Inject constructor(
 ```kotlin
 // Orchestrates a repository and a platform service, enforces a domain rule,
 // and takes time from an injected Clock. Once started, both steps must happen,
-// so they run in an injected application scope (see tactical-ddd-kotlin.md, section 4).
+// so they run in an injected application scope (see tactical-ddd-kotlin.md, section 5).
 class FinishRouteUseCase(
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
@@ -85,9 +85,10 @@ For a characterization test around a gnarly legacy class with many concrete depe
 1. **Virtual time for delays and TTLs.** Inside `runTest`, inject `testScheduler.timeSource` as the `TimeSource` and `StandardTestDispatcher(testScheduler)` as the dispatcher. `delay()` and TTL checks then share one virtual clock, and `advanceTimeBy(5.minutes)` moves both. (`TestTimeSource` works for code without coroutines.)
 2. **Don't read the system clock in production code.** Inject `kotlin.time.Clock` or `TimeSource` instead of calling `System.currentTimeMillis()` or `Clock.System.now()`.
 3. **Concurrency.** Launch callers with `async` and simulate latency in fakes to prove, for example, that five concurrent refreshes of one key make one network call while different keys run in parallel.
-4. **StateFlow with Turbine.** A `stateIn(SharingStarted.WhileSubscribed(...))` flow runs only while collected, so reading `state.value` alone stays at the initial value. Collect with Turbine (`state.test { awaitItem() }`) and pass `backgroundScope` as the ViewModel's scope. For androidx ViewModels that use `viewModelScope`, call `Dispatchers.setMain(StandardTestDispatcher())` in setup.
+4. **StateFlow with Turbine.** A `stateIn(SharingStarted.WhileSubscribed(...))` flow runs only while collected, so reading `state.value` alone stays at the initial value. Collect with Turbine (`state.test { awaitItem() }`) and pass `backgroundScope` as the ViewModel's scope. `advanceUntilIdle()` stops once only `backgroundScope` work is left ([docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/kotlinx.coroutines.test/-test-scope/background-scope.html)), so it may not run the ViewModel at all. Wait with `awaitItem()`, or use `runCurrent()` or `advanceTimeBy()`, which do run it.
+5. **androidx ViewModels.** For ViewModels that use `viewModelScope`, call `Dispatchers.setMain(StandardTestDispatcher())` in a rule or in setup, and create the ViewModel after it: in the test, as the [Android docs](https://developer.android.com/kotlin/coroutines/test) do, or lazily. A property of the test class is initialized before rules and `@Before` run. `viewModelScope` takes `Dispatchers.Main.immediate` once, when it's first used. A ViewModel that calls `stateIn(viewModelScope, ...)` in a property uses it during construction, so if it's created before `setMain`, it keeps the old Main dispatcher, and its coroutines don't run on the test scheduler.
 
-`examples/PragmaticTestingWithFakesTest.kt` shows all four.
+`examples/PragmaticTestingWithFakesTest.kt` shows the first four.
 
 ---
 

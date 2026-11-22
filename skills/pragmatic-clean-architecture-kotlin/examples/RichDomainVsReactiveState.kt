@@ -108,15 +108,17 @@ data class PhotoMetadata(
     val generativeSummary: String? = null,
     val neighborhoodSummary: String? = null,
 ) {
+    // The text fields are null when missing, never blank: the boundary mapper
+    // (toDomainOrNull in AntiCorruptionAndSmartMapping.kt) turns blank text into null,
+    // so these getters don't check again.
     val hasAiSummary: Boolean
         get() = aiSummary != null
 
     val primaryDescription: String?
-        get() = aiSummary ?: displayName?.takeIf { it.isNotBlank() }
+        get() = aiSummary ?: displayName
 
-    // One definition of "has a summary", so every getter treats a blank summary as missing.
     private val aiSummary: String?
-        get() = generativeSummary?.takeIf { it.isNotBlank() } ?: neighborhoodSummary?.takeIf { it.isNotBlank() }
+        get() = generativeSummary ?: neighborhoodSummary
 }
 
 data class RouteWithPhotos(
@@ -130,6 +132,24 @@ interface RouteRepository {
     suspend fun saveRoute(route: Route)
 }
 
+// Which route is tracked, if any. One sealed state instead of a "service is running"
+// flag plus a nullable route ID: that pair could say "tracking, but no route", and a
+// screen couldn't tell whether the tracked route is the one it shows.
+sealed interface TrackingState {
+    data object Idle : TrackingState
+    data class Tracking(val routeId: RouteId) : TrackingState
+}
+
+// A port for work the platform runs outside any screen (a foreground service on
+// Android): see references/tactical-ddd-kotlin.md, section 3. `state` changes when
+// tracking actually starts, not when start() is called, because Android can refuse
+// to start a foreground service. stop() returns once tracking has stopped.
+interface LocationTracker {
+    val state: StateFlow<TrackingState>
+    fun start(routeId: RouteId)
+    suspend fun stop()
+}
+
 // ============================================================================
 // 3. VIEWMODEL: cross-stream and UI-reactive derivations live here.
 //    A plain class so the example compiles without androidx; in an app, extend
@@ -139,14 +159,14 @@ interface RouteRepository {
 class ActiveRouteViewModel(
     routeId: RouteId,
     routeRepository: RouteRepository,
-    isLocationServiceRunning: Flow<Boolean>,
+    locationTracker: LocationTracker,
     scope: CoroutineScope,
     defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     // UI-local state (hybrid style): a private source combined with the data flows.
     private val onlyWithAiSummary = MutableStateFlow(false)
 
-    // Depends only on the route and the filter. A service toggle doesn't re-run the
+    // Depends only on the route and the filter. A tracking change doesn't re-run the
     // O(N) filter, so the same PhotoSection instance flows through and Compose can
     // skip the photo list by identity.
     private val photoSection: Flow<PhotoSection> = combine(
@@ -160,10 +180,10 @@ class ActiveRouteViewModel(
         )
     }
 
-    val state: StateFlow<State> = combine(photoSection, isLocationServiceRunning) { section, serviceRunning ->
+    val state: StateFlow<State> = combine(photoSection, locationTracker.state) { section, tracking ->
         State(
-            isLocationServiceRunning = serviceRunning,
-            ongoingRouteId = routeId,
+            routeId = routeId,
+            tracking = tracking,
             photoSection = section,
         )
     }
@@ -171,7 +191,7 @@ class ActiveRouteViewModel(
         .stateIn(
             scope = scope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = State(),
+            initialValue = State(routeId),
         )
 
     fun onAction(action: Action) {
@@ -191,13 +211,14 @@ class ActiveRouteViewModel(
     )
 
     data class State(
-        private val isLocationServiceRunning: Boolean = false,
-        val ongoingRouteId: RouteId? = null,
+        val routeId: RouteId,
+        private val tracking: TrackingState = TrackingState.Idle,
         val photoSection: PhotoSection = PhotoSection(),
     ) {
-        // O(1) cross-stream flags: service status + route + photos. They can't live on Route.
+        // O(1) cross-stream flags: the tracker's state + this screen's route + photos.
+        // They can't live on Route. Tracking another route doesn't count.
         val isTracking: Boolean
-            get() = isLocationServiceRunning && ongoingRouteId != null
+            get() = tracking is TrackingState.Tracking && tracking.routeId == routeId
 
         // Uses the unfiltered photos: a filter that hides every photo isn't "loading".
         val isStreamLoading: Boolean
