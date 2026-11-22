@@ -25,6 +25,7 @@ A concise summary for engineers and tech leads evaluating Pragmatic Clean Archit
 
 ### Runtime quality
 * **Smooth UI**: Computing derived lists once per change, and preserving their instances, keeps work off the main thread and lets Compose skip unchanged UI.
+* **Bugs surface instead of hiding**: Catches cover only the call that can fail and the failures it's expected to have, so a bug ends the work and reaches crash reporting, instead of a screen that quietly shows nothing or a service that fails at every step.
 * **Trustworthy experiment data**: Exposure-safe flag reads log an exposure only when a user reaches the experiment, so A/B results aren't diluted by users who never saw the variant, or skewed by users who saw both.
 
 ### Team and reviews
@@ -36,5 +37,6 @@ A concise summary for engineers and tech leads evaluating Pragmatic Clean Archit
 
 * **The payoff depends on how much logic the app has**: A thin client that only shows what the backend decides, or a mostly technical app such as a camera tool, has few rules to move onto domain models. There, most of the gain is less ceremony and better tests.
 * **Structure varies by need**: In a rigid layout, every feature gets the same set of files whether it needs them or not (DTO, entity, domain model, repository interface and implementation, use case, UI model, mappers), so features look uniform and are easy to check mechanically. Here, one screen may have no use case or UI model while the next has both. Each of those calls takes judgment and an understanding of the principles behind the rules; the decision tables and checklist keep the calls consistent across a team.
+* **Failing loudly shows bugs that catch-alls hid**: Without a catch-all, a bug stops the work (a screen shows its error state, a service stops) and shows up in crash reports. Expect a few right after the change; each one was already failing, quietly.
 * **Fakes cost code up front and need upkeep**: A stateful fake takes more code on day one than `mockk<Repository>(relaxed = true)`, and it can drift from the real implementation. One fake per boundary is reused across many tests; for critical boundaries, run the same tests against the fake and the real implementation (for example, an in-memory database).
 * **Value objects add friction at the edges**: Wrapping and unwrapping happens in mappers and navigation arguments, Dagger and Hilt cannot take a value class as an assisted-injection parameter, and Swift sees the underlying primitive instead of the Kotlin type. So the skill uses them only where they prevent real mistakes: IDs, keys, and values whose format, range or unit other code relies on. Display text stays a `String`.

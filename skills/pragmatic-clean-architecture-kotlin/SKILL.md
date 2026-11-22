@@ -66,7 +66,8 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 ## 6. Errors and coroutines
 
-- Map technical failures (`HttpException`, `SQLException`, SDK exceptions) to domain errors at the repository boundary.
+- Map technical failures (`HttpException`, `SQLException`, SDK exceptions) to domain errors at the repository boundary. Put only the call you don't control inside the `try`, so a bug in your own mapping isn't reported as an API failure, and match failures by type or status code, never by message text. A failure is never an empty result.
+- **No catch-all to keep going.** Use cases and long-running work (a service that handles each location) don't wrap their steps in `catch (e: Exception)`. Expected failures arrive as domain errors; anything else is a bug that should end the work, so its owner stops and reports it.
 - **Never swallow cancellation.** When catching `Exception`/`Throwable` or using `runCatching` around suspend calls, rethrow `CancellationException`. Prefer catching specific exception types.
 - **Pick the scope by how long the work must live.** Work for the screen runs in `viewModelScope` and stops when the ViewModel is cleared. Work that must finish once it has started, such as a save in several steps, runs in an injected application scope with `scope.async { ... }.await()`. Inject that scope into the use case or repository that owns the work, so that every caller gets the guarantee. Work that must survive process death goes to WorkManager on Android.
 - Inject dispatchers, `Clock`, `TimeSource`, and ID generators. Don't call `Clock.System.now()` or `System.currentTimeMillis()`, or create random IDs, in repositories, use cases, or domain code.
@@ -134,7 +135,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
    - boolean or nullable combinations that a `sealed` type would make impossible;
    - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
    - invariants checked in several places instead of once, at construction or at the boundary.
-3. Report suggestions, most important first: correctness risks (swallowed cancellation, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
+3. Report suggestions, most important first: correctness risks (swallowed cancellation, catch-alls that hide bugs, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
 4. For each suggestion, give the location, why it helps, a short before/after, and its cost or trade-off. Mark optional suggestions as optional, and say so when the current code is fine as it is.
 5. Don't apply changes unless asked.
 
@@ -146,6 +147,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
+- [ ] Each `try` wraps only the call that can fail and catches only what you expect; failures don't become empty results, and use cases don't catch everything to keep going.
 - [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or holds logic its callers would otherwise duplicate; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.

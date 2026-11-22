@@ -101,7 +101,7 @@ interface LocationTracker {
 
 - **One sealed state, with one owner.** A "service is running" flag plus a nullable route ID can say "tracking, but no route", and a screen can't tell whether the tracked route is its own: `ActiveRouteViewModel.State.isTracking` compares the IDs. Screens read the port's state instead of keeping their own copy of "the ongoing route", which drifts.
 - **Report what the platform confirmed.** Starting a foreground service can fail. An app that targets Android 12 or higher gets a `ForegroundServiceStartNotAllowedException` when it starts one from the background ([docs](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)), and one that targets Android 14 or higher gets a `SecurityException` when a permission for the service type is missing ([docs](https://developer.android.com/develop/background-work/services/fgs/launch)). So `state` becomes `Tracking` once the service runs in the foreground, not when `start()` is called, and `Idle` whenever the service stops, whatever the reason.
-- **The component hosts the work; a use case holds the rules.** What happens at each location (search nearby places, skip the ones already saved) goes in a use case that the service runs, so a JVM test reaches it without Android. The service keeps the platform parts: its lifecycle, the notification, and stopping when the work fails.
+- **The component hosts the work; a use case holds the rules.** What happens at each location (search nearby places, skip the ones already saved) goes in a use case that the service runs, so a JVM test reaches it without Android. The service keeps the platform parts: its lifecycle, the notification, and stopping when the work fails (see section 5).
 
 ## 4. What usually doesn't pay off on clients
 
@@ -129,18 +129,25 @@ sealed class PhotoMetadataException(message: String, cause: Throwable? = null) :
 
 ```kotlin
 // RemoteNearbyPlacesRepository from examples/AntiCorruptionAndSmartMapping.kt, with exceptions instead of NearbyPlacesResult
-suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> =
-    try {
+suspend fun nearbyPlaces(location: Coordinates): List<PlaceCandidate> {
+    val response = try {
         api.searchNearby(location.latitude, location.longitude, radiusMeters)
-            .places.orEmpty().mapNotNull { it.toDomainOrNull() }
     } catch (e: CancellationException) {
         throw e // let cancellation propagate
     } catch (e: Exception) {
         throw PhotoMetadataException.PlacesUnavailable(e)
     }
+    return response.places.orEmpty().mapNotNull { it.toDomainOrNull() } // your own code: outside the try
+}
 ```
 
 Prefer catching specific exception types. If you must catch broadly or use `runCatching`, rethrow `CancellationException` first.
+
+**Catch only what you expect, where it happens.** A broad catch hides bugs along with the failures it was written for.
+- Put only the call you don't control inside the `try`, as above. A bug in your own mapping then fails loudly instead of looking like an unavailable API. Catch broadly only around such a call, for an SDK that throws types it doesn't document.
+- Match failures by type or status code (`statusCode == 429`), never by message text.
+- Report a failure as a failure: `catch (e: IOException) { emptyList() }` tells the user that nothing is nearby when the device is offline.
+- Don't wrap the steps of a use case or a long-running loop in `catch (e: Exception)` to keep going. Expected failures already arrive as domain errors. Anything else is a bug that should end the work, so that its owner (a ViewModel, a service) stops and reports it, instead of failing quietly at every location.
 
 ### Work that must finish after the user leaves
 

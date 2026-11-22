@@ -18,6 +18,7 @@ Pragmatic Clean Architecture for Kotlin client code: boundaries where they prote
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
+- [ ] Each `try` wraps only the call that can fail and catches only what you expect; failures don't become empty results, and use cases don't catch everything to keep going.
 - [ ] Each use case orchestrates 2+ collaborators, enforces a domain policy, or holds logic its callers would otherwise duplicate; no pass-throughs and no use-case interfaces.
 - [ ] Cheap intrinsic rules sit on the domain model, cross-stream values in the ViewModel, and nothing O(N) runs in a getter.
 - [ ] Derived lists are computed once per relevant change and keep their instance when their inputs don't change; no `List` → `ImmutableList` conversion without a benchmark.
