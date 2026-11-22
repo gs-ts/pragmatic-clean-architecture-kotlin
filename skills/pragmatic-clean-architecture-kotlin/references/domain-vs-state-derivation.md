@@ -150,7 +150,7 @@ Formatting needs `Context`, string resources, or `Locale`. Do it in the composab
 
 Never write into derived state. Don't collect a data flow in `init` just to copy it into a `MutableStateFlow`: `stateIn(WhileSubscribed)` stops the upstream when nobody is collecting, and the copy loses that.
 
-**A key and the data loaded for it.** `combine` pairs the latest value of each flow ([docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/combine.html)). When UI-local state picks what to load, such as a selected route, and the same `combine` also reads that state, the new key arrives first, so `combine` emits it once with the previous key's data. In that state, the screen shows route 2 as selected with route 1's photos, and an action taken then uses the wrong route. Keep the key with the loaded data (`RouteWithPhotos` has its `route.id`), and use the data only while the keys match:
+**A key and the data loaded for it.** `combine` pairs the latest value of each flow ([docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/combine.html)). When UI-local state picks what to load, such as a selected route, and the same `combine` also reads that state, the new key arrives first, so `combine` emits it once with the previous key's data. In that state, the screen shows route 2 as selected with route 1's photos, and an action taken then uses route 1's photos. Keep the key with the loaded data (`RouteWithPhotos` has its `route.id`), and use the data only while the keys match:
 
 ```kotlin
 // A list-detail screen: the user picks a route in the list, and the detail shows its photos.

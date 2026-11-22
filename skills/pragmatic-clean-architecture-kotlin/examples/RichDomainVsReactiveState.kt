@@ -109,8 +109,8 @@ data class PhotoMetadata(
     val neighborhoodSummary: String? = null,
 ) {
     // The text fields are null when missing, never blank: the boundary mapper
-    // (toDomainOrNull in AntiCorruptionAndSmartMapping.kt) checks that once, so these
-    // getters don't check again.
+    // (toDomainOrNull in AntiCorruptionAndSmartMapping.kt) turns blank text into null,
+    // so these getters don't check again.
     val hasAiSummary: Boolean
         get() = aiSummary != null
 

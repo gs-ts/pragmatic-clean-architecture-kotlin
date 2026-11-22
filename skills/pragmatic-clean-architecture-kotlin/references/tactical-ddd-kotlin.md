@@ -111,7 +111,7 @@ interface LocationTracker {
 
 Reach for them only when the client really owns the invariant (for example, offline-first editing with local conflict rules).
 
-When the client does own an invariant that two callers can race on, one conditional write usually enforces it, without an aggregate. `FinishRouteUseCase` (section 5) reads the route, checks it, and saves it: fine while the screen is its only caller. Once a second caller can finish the route, such as another screen or a notification action, both callers can read it as ongoing, so let one statement decide, such as `UPDATE routes SET finished_at = :at WHERE id = :id AND finished_at IS NULL`. A Room `@Query` that runs an `UPDATE` can return the number of rows it changed as an `Int`: 0 means that the other caller won.
+When the client does own an invariant that two callers can race on, one conditional write usually enforces it, without an aggregate. `FinishRouteUseCase` (section 5) reads the route, checks it, and saves it, which keeps the example short. If two calls can overlap, such as from two screens, both can read the route as ongoing and both save it. Let one statement decide instead, such as `UPDATE routes SET finished_at = :at WHERE id = :id AND finished_at IS NULL`. A Room `@Query` that runs an `UPDATE` can return the number of rows it changed as an `Int`: 0 means that the other caller won.
 
 ---
 
