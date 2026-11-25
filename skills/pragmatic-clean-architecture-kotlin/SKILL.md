@@ -52,7 +52,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 
 - **Prefer duplication over the wrong abstraction.** When shared code grows boolean mode flags (`isHistoryView: Boolean`) to serve individual callers, inline it back into the callers and wait for 3+ stable uses to reveal a flag-free abstraction.
 - **Base classes:** don't create `BaseViewModel`/`BaseRepository` up front. Once 3+ screens share a stable, flag-free shape (for example an MVI store contract), a small base class or, preferably, a composed helper is fine. If the codebase already standardizes one, use it.
-- **Tell, don't ask** for domain rules (`route.canBeFinishedWith(name)`), not for UI state.
+- **Tell, don't ask** for domain rules (`route.canBeFinishedWith(name)`), not for UI state. Which screen a tap opens is presentation logic when it only looks up a status for one screen: keep it in the ViewModel as one exhaustive `when`, including a status the backend already decided. When the decision applies product rules (several facts together, time windows, limits, eligibility), or other code needs the same answer, put that rule on the model with its own test, and let the ViewModel map the answer to a screen.
 - **Interfaces where rates of change differ:** I/O boundaries and platform services, not 1:1 wrappers around stable classes.
 - **Closed sets → `sealed interface` + exhaustive `when`** (UI state, actions, domain errors, variant hierarchies), with no `else` branch, so new variants break the build. **Open behavior → `interface`/`fun interface`** (repositories, strategies, decorators).
 
@@ -132,20 +132,20 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 1. Read the project's conventions, then the feature end to end: domain models, repository, use cases, ViewModel, UI, and tests.
 2. Walk the checklist below, and look for domain-modeling opportunities in particular:
    - primitives that should be value objects (IDs, amounts, coordinates), but not display text such as names and titles, or values that code only passes along;
-   - rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask);
+   - business rules that a ViewModel or composable computes from a model's fields, which belong on the model (Tell, Don't Ask), but not a status-to-screen lookup for a single screen;
    - domain rules inside an Android component (a `Service`, a `Worker`), which belong in a use case that the component runs;
    - boolean or nullable combinations that a `sealed` type would make impossible;
    - backend, DTO, or SDK vocabulary in domain or UI names, where the product's language fits better;
    - invariants checked in several places instead of once, at construction or at the boundary.
 3. Report suggestions, most important first: correctness risks (swallowed cancellation, catch-alls that hide bugs, throwing mappers, double exposures), then domain-modeling improvements, then simplifications (pass-through use cases, 1:1 mappers), then tests.
-4. For each suggestion, give the location, why it helps, a short before/after, and its cost or trade-off. Mark optional suggestions as optional, and say so when the current code is fine as it is.
+4. For each suggestion, give the location, why it helps, a short before/after, and its cost or trade-off. Count the whole cost: new types, mappings, and test cases. A new type that only renames an existing one case for case, or a second test table for the same cases, usually costs more than it saves. Mark optional suggestions as optional, and say so when the current code is fine as it is.
 5. Don't apply changes unless asked.
 
 <!-- BEGIN CHECKLIST: shared with ide-configs/ by scripts/build-adapters.sh -->
 ## Checklist (write and review against these)
 
 - [ ] Follows the project's existing conventions; changes stay within the requested scope.
-- [ ] Domain concepts are explicit and named in the product's language: IDs, keys, and values whose format, range or unit code relies on are value objects (display text stays a `String`), rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
+- [ ] Domain concepts are explicit and named in the product's language: IDs, keys, and values whose format, range or unit code relies on are value objects (display text stays a `String`), business rules derived from a model's fields are methods on the model, and `sealed` types rule out impossible combinations.
 - [ ] No DTO or SDK type from an API you don't control reaches domain or UI code.
 - [ ] Boundary mappers parse instead of throwing; one bad record can't terminate a `Flow`.
 - [ ] Any catch of `Exception`/`Throwable`, or `runCatching`, around suspend calls rethrows `CancellationException`.
