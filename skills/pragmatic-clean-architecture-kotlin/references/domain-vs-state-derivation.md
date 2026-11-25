@@ -6,7 +6,7 @@ Reactive Kotlin clients (Android or KMP, with `Flow` and Compose) fall into two 
 
 ## Rule 1: Intrinsic, cheap (O(1)) logic belongs in the domain model
 
-If a value depends only on the model's own fields and is cheap to compute, put it on the model. When the UI observes `Flow<Route>` from Room, SQLDelight, or Ktor, every update emits a new immutable instance, so the value recalculates without any ViewModel code.
+If a value depends only on the model's own fields and is cheap to compute, put it on the model. This is for values that describe the model (`isOngoing`, `hasAiSummary`); for which screen a tap opens, see `aha-and-poodr-kotlin.md` §2. When the UI observes `Flow<Route>` from Room, SQLDelight, or Ktor, every update emits a new immutable instance, so the value recalculates without any ViewModel code.
 
 ```kotlin
 @JvmInline

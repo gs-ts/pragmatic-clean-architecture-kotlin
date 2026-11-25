@@ -27,6 +27,8 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 | The current time | A **`now: Instant` parameter** (`isAbandonedAt(now)`); ticking UI from an injected `Clock` | Keeps domain code pure and testable. |
 | Locale, string resources, `Context` | **Composable**, or keep `StringResource`/`UiText` in state | ViewModels survive locale changes, so strings formatted there go stale. Also keeps shared code platform-free. |
 
+Which screen a tap opens isn't a derived value of the model: a status-to-screen lookup for one screen stays in the ViewModel, and only a choice that applies product rules, or that other code needs, goes on the model (§4).
+
 → Details: `references/domain-vs-state-derivation.md`
 
 ## 2. ViewModel state and Compose
@@ -166,7 +168,7 @@ Apply tactical DDD, Clean Architecture, AHA (Avoid Hasty Abstractions), Sandi Me
 ## Reference and example files
 
 - `references/domain-vs-state-derivation.md`: derived values, ViewModel state styles, text fields, and Compose performance under strong skipping.
-- `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask, and `sealed` vs. polymorphism.
+- `references/aha-and-poodr-kotlin.md`: the wrong-abstraction cure, base classes, Tell Don't Ask (including where navigation decisions belong), and `sealed` vs. polymorphism.
 - `references/smart-mapping-and-acl.md`: boundary mapping, parse-don't-throw policies, and when a UI-specific type earns its place.
 - `references/feature-flags-and-ab-testing.md`: experiment contracts, exposure-safe reads, and inline branches vs. Strategy.
 - `references/tactical-ddd-kotlin.md`: value objects, entities on clients, ports for work the platform runs, domain errors, cancellation, coroutine scopes, reflection, DI, and GoF patterns.

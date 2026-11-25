@@ -87,7 +87,7 @@ data class Route(
 
 ### Navigation decisions: weigh the product logic in them
 
-Which screen a tap opens sits between the two. Decide by what the decision holds, not by where its inputs come from:
+Which screen a tap opens sits between the two. Decide by how much product logic the decision holds:
 
 - **A lookup from a status to a screen, for one screen, stays in the ViewModel** as one exhaustive `when`. This includes a status the backend already decided, such as a backend-driven "pending" with a reason: the client only routes it. Moving it into the domain adds a type that renames the screens case for case, and a second test table for the same cases.
 - **A decision that applies product rules goes on the model, with its own domain test.** That is the case when it combines several facts, applies time windows, limits or eligibility, or when other code needs the same answer (a badge, a notification, another platform). The ViewModel then maps the model's answer to a screen. When the answer has several outcomes, a `sealed` type on the model is fine, as long as its cases are product outcomes rather than screen names.
