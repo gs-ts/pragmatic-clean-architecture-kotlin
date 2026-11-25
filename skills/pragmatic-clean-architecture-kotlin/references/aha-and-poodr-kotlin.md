@@ -85,6 +85,26 @@ data class Route(
 ```
 *Boundary:* use Tell, Don't Ask for **domain invariants and intrinsic rules**. Don't push UI-only state (whether a dialog or bottom sheet is open) into the domain model.
 
+### Navigation decisions: weigh the product logic in them
+
+Which screen a tap opens sits between the two. Decide by how much product logic the decision holds:
+
+- **A lookup from a status to a screen, for one screen, stays in the ViewModel** as one exhaustive `when`. This includes a status the backend already decided, such as a backend-driven "pending" with a reason: the client only routes it. Moving it into the domain adds a type that renames the screens case for case, and a second test table for the same cases.
+- **A decision that applies product rules goes on the model, with its own domain test.** That is the case when it combines several facts, applies time windows, limits or eligibility, or when other code needs the same answer (a badge, a notification, another platform). The ViewModel then maps the model's answer to a screen. When the answer has several outcomes, a `sealed` type on the model is fine, as long as its cases are product outcomes rather than screen names.
+
+Start in the ViewModel, and move the decision to the model when one of those reasons appears. The `when` is exhaustive and tested, so the move is mechanical.
+
+```kotlin
+// Stays in the ViewModel: one screen looks up the route's state.
+private fun Route.destination(): Destination =
+    if (isOngoing) Destination.Tracking(id) else Destination.Summary(id)
+
+// Goes on the model: resuming applies a time window, and the route list shows a "Resume" badge from it too.
+// (A member of Route; RESUME_WINDOW is a Duration in its companion object.)
+fun canBeResumedAt(now: Instant): Boolean =
+    finishedAt != null && now - finishedAt < RESUME_WINDOW && distanceMeters > 0.0
+```
+
 ---
 
 ## 3. Depend on things that change less often (POODR's stability rule)
